@@ -1,0 +1,2 @@
+# This file exists so that the empty static/reports/ directory can be included in git
+# This directory is used to store processed report data and visualizations 

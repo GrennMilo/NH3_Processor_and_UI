@@ -1,0 +1,410 @@
+{% extends "layout.html" %}
+
+{% block title %}Upload Data - Skid NH3 Syn. Data Processor{% endblock %}
+
+{% block content %}
+<div class="upload-page">
+    <div class="page-header">
+        <h2 class="section-title">Upload Data Files</h2>
+    </div>
+    
+    <div class="card upload-card">
+        <div class="card-header">
+            <h3><i class="fas fa-file-upload"></i> Process New Files</h3>
+        </div>
+        
+        <div class="card-body">
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="lv_file">
+                        <i class="fas fa-file-alt"></i> LV File <span class="required">*</span>
+                    </label>
+                    <div class="file-input-container">
+                        <input type="file" id="lv_file" name="lv_file" accept=".txt" required>
+                        <div class="file-feedback" id="lv-file-feedback">No file selected</div>
+                    </div>
+                    <div class="file-description">
+                        <p>Select a LabVIEW (.txt) file containing time series data with temperature, pressure, and flow data.</p>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="gc_file">
+                        <i class="fas fa-file-alt"></i> GC File <span class="required">*</span>
+                    </label>
+                    <div class="file-input-container">
+                        <input type="file" id="gc_file" name="gc_file" accept=".txt" required>
+                        <div class="file-feedback" id="gc-file-feedback">No file selected</div>
+                    </div>
+                    <div class="file-description">
+                        <p>Select a Gas Chromatography (.txt) file containing H2, N2, and NH3 concentration data for integration with LV data.</p>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="report_prefix_text_input">
+                        <i class="fas fa-tag"></i> Report Name Prefix (Optional)
+                    </label>
+                    <input type="text" id="report_prefix_text_input" name="report_prefix_text" placeholder="e.g., ExperimentA">
+                    <div class="input-description">
+                        <p>Add a custom prefix to your report folder name for easier identification.</p>
+                    </div>
+                </div>
+                
+                <!-- Interpolation Options -->
+                <div class="form-group">
+                    <label>
+                        <i class="fas fa-chart-line"></i> Data Fusion Method
+                    </label>
+                    
+                    <div class="option-container">
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="use_interpolation" name="use_interpolation" value="true">
+                            <label for="use_interpolation">Use Advanced Interpolation</label>
+                        </div>
+                        
+                        <select id="interpolation_kind" name="interpolation_kind" disabled title="Select interpolation method">
+                            <option value="cubic">Cubic (Smooth curves)</option>
+                            <option value="linear">Linear (Simple straight lines)</option>
+                            <option value="quadratic">Quadratic (Medium complexity)</option>
+                            <option value="nearest">Nearest (Step-like)</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Uniform Grid Options -->
+                    <div class="option-container" id="uniform_grid_container" style="margin-top: 10px; display: none;">
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="use_uniform_grid" name="use_uniform_grid" value="true" checked>
+                            <label for="use_uniform_grid">Use Uniform Time Grid</label>
+                        </div>
+                        
+                        <select id="grid_freq" name="grid_freq" title="Select grid frequency">
+                            <option value="1min">1 Minute (Default)</option>
+                            <option value="30s">30 Seconds (Higher Resolution)</option>
+                            <option value="2min">2 Minutes (Medium Resolution)</option>
+                            <option value="5min">5 Minutes (Lower Resolution)</option>
+                            <option value="10min">10 Minutes (Lowest Resolution)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="input-description">
+                        <p>Choose between traditional merge_asof matching (default) or advanced interpolation-based data fusion for improved temporal alignment of GC and LV data.</p>
+                        <details>
+                            <summary>Learn more about interpolation</summary>
+                            <div class="details-content">
+                                <p><strong>Traditional merge_asof:</strong> Simple nearest-neighbor matching with time tolerance (5 minutes by default). Each LV data point is paired with the closest GC measurement.</p>
+                                <p><strong>Advanced Interpolation:</strong> Creates a continuous function between GC data points to estimate values at exact LV timestamps.</p>
+                                <ul>
+                                    <li><strong>Cubic:</strong> Smooth curves with continuous first derivatives. Best for most scientific data.</li>
+                                    <li><strong>Linear:</strong> Simple straight lines between points. Good for data with sharp transitions.</li>
+                                    <li><strong>Quadratic:</strong> Intermediate complexity between linear and cubic.</li>
+                                    <li><strong>Nearest:</strong> Step-function interpolation (nearest-neighbor).</li>
+                                </ul>
+                                <p><strong>Uniform Time Grid:</strong> When enabled, resamples all data to a regular time interval, which ensures consistent spacing between data points.</p>
+                                <ul>
+                                    <li>This improves visualization quality and is ideal for comparing different experiments.</li>
+                                    <li>Select a grid frequency that matches your data's natural sampling rate for best results.</li>
+                                </ul>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+                <!-- End Interpolation Options -->
+                
+                <div class="upload-actions">
+                    <button type="submit" class="btn-primary" id="process-btn">
+                        <i class="fas fa-cog"></i> Process Files
+                    </button>
+                    <button type="reset" class="btn-secondary" id="reset-btn">
+                        <i class="fas fa-redo"></i> Reset Form
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card upload-instructions-card">
+        <div class="card-header">
+            <h3><i class="fas fa-info-circle"></i> Upload Instructions</h3>
+        </div>
+        <div class="card-body">
+            <div class="instructions-container">
+                <div class="instruction-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Prepare Your Files</h4>
+                        <p>Ensure your LV and GC files are in the correct .txt format with tab-separated values.</p>
+                    </div>
+                </div>
+                
+                <div class="instruction-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Upload Both Files</h4>
+                        <p>Select both your LV and GC files using the file selectors above.</p>
+                    </div>
+                </div>
+                
+                <div class="instruction-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>Add Optional Prefix</h4>
+                        <p>For better organization, add a descriptive prefix to your report name.</p>
+                    </div>
+                </div>
+                
+                <div class="instruction-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>Choose Data Fusion Method</h4>
+                        <p>Select advanced interpolation for smoother GC data integration with LV data.</p>
+                    </div>
+                </div>
+                
+                <div class="instruction-step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h4>Process Files</h4>
+                        <p>Click "Process Files" and wait for your data to be analyzed and merged.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="file-format-info">
+                <h4>Required File Formats</h4>
+                <p><strong>LV File:</strong> Must contain columns for DateTime, RelativeTime, Temperature, Pressure, H2 Flow, and N2 Flow.</p>
+                <p><strong>GC File:</strong> Must contain columns for Date/Time and concentration data for H2, N2, and NH3.</p>
+                <p><strong>GC Integration:</strong> The system will automatically map the GC concentration columns to the correct gas components.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="upload-status-card" class="card status-card" style="display: none;">
+        <div class="card-header">
+            <h3><i class="fas fa-tasks"></i> Processing Status</h3>
+        </div>
+        <div class="card-body">
+            <div id="upload-status-message" class="status-message"></div>
+            <div class="upload-progress-container">
+                <div id="upload-progress-bar" class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+            </div>
+            <div id="result-links-container" class="result-links" style="display: none;"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadForm = document.getElementById('upload-form');
+    const lvFileInput = document.getElementById('lv_file');
+    const gcFileInput = document.getElementById('gc_file');
+    const lvFileFeedback = document.getElementById('lv-file-feedback');
+    const gcFileFeedback = document.getElementById('gc-file-feedback');
+    const uploadStatusCard = document.getElementById('upload-status-card');
+    const uploadStatusMessage = document.getElementById('upload-status-message');
+    const progressBar = document.getElementById('upload-progress-bar').querySelector('.progress-fill');
+    const resultLinksContainer = document.getElementById('result-links-container');
+    
+    // Update file input feedback
+    lvFileInput.addEventListener('change', function() {
+        updateFileFeedback(this, lvFileFeedback);
+    });
+    
+    gcFileInput.addEventListener('change', function() {
+        updateFileFeedback(this, gcFileFeedback);
+    });
+    
+    // Reset form button
+    document.getElementById('reset-btn').addEventListener('click', function() {
+        lvFileFeedback.textContent = 'No file selected';
+        gcFileFeedback.textContent = 'No file selected';
+        uploadStatusCard.style.display = 'none';
+    });
+    
+    // Form submission
+    uploadForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        if (!validateForm()) {
+            return;
+        }
+        
+        // Show status card and reset previous results
+        uploadStatusCard.style.display = 'block';
+        uploadStatusMessage.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading files...';
+        uploadStatusMessage.className = 'status-message info';
+        progressBar.style.width = '0%';
+        resultLinksContainer.style.display = 'none';
+        resultLinksContainer.innerHTML = '';
+        
+        // Start upload progress animation
+        let progressWidth = 0;
+        const progressInterval = setInterval(function() {
+            if (progressWidth >= 90) {
+                clearInterval(progressInterval);
+            } else {
+                progressWidth += 5;
+                progressBar.style.width = progressWidth + '%';
+            }
+        }, 500);
+        
+        const formData = new FormData(uploadForm);
+        
+        fetch('/process', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Complete the progress bar
+            clearInterval(progressInterval);
+            progressBar.style.width = '100%';
+            
+            if (data.success) {
+                // Show success message
+                uploadStatusMessage.innerHTML = '<i class="fas fa-check-circle"></i> Processing complete!';
+                uploadStatusMessage.className = 'status-message success';
+                
+                // Add result links
+                resultLinksContainer.style.display = 'block';
+                
+                const gcVisualizationHtml = data.gc_plot_path ? 
+                    `<p>GC data visualization: <strong>Created</strong></p>` : 
+                    `<p>GC data visualization: <strong>Not available</strong></p>`;
+                
+                const resultsHtml = `
+                    <h4>Processing Results</h4>
+                    <p>Report created: <strong>${data.timestamp_prefix}</strong></p>
+                    <p>Stages detected: <strong>${data.num_stages}</strong></p>
+                    ${gcVisualizationHtml}
+                    ${data.use_interpolation ? `<p>Data fusion method: <strong>Interpolation (${data.interpolation_kind})</strong></p>` : ''}
+                    <div class="result-buttons">
+                        <a href="/visualize?report=${encodeURIComponent(data.timestamp_prefix)}" class="btn-primary">
+                            <i class="fas fa-eye"></i> View Results
+                        </a>
+                        <a href="/reports" class="btn-secondary">
+                            <i class="fas fa-folder-open"></i> Manage Reports
+                        </a>
+                    </div>
+                `;
+                
+                resultLinksContainer.innerHTML = resultsHtml;
+                
+                // Reset form if needed
+                // uploadForm.reset();
+                // lvFileFeedback.textContent = 'No file selected';
+                // gcFileFeedback.textContent = 'No file selected';
+            } else {
+                // Show error message
+                uploadStatusMessage.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error: ${data.message}`;
+                uploadStatusMessage.className = 'status-message error';
+            }
+        })
+        .catch(error => {
+            // Complete the progress bar
+            clearInterval(progressInterval);
+            progressBar.style.width = '100%';
+            
+            console.error('Error during upload:', error);
+            uploadStatusMessage.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Upload failed. Please try again.';
+            uploadStatusMessage.className = 'status-message error';
+        });
+    });
+    
+    // Handle interpolation checkbox
+    const useInterpolationCheckbox = document.getElementById('use_interpolation');
+    const interpolationKindSelect = document.getElementById('interpolation_kind');
+    const uniformGridContainer = document.getElementById('uniform_grid_container');
+    const useUniformGridCheckbox = document.getElementById('use_uniform_grid');
+    const gridFreqSelect = document.getElementById('grid_freq');
+    
+    useInterpolationCheckbox.addEventListener('change', function() {
+        interpolationKindSelect.disabled = !this.checked;
+        uniformGridContainer.style.display = this.checked ? 'block' : 'none';
+        // If interpolation is disabled, also disable uniform grid options
+        if (!this.checked) {
+            useUniformGridCheckbox.checked = false;
+            gridFreqSelect.disabled = true;
+        } else {
+            // When enabling interpolation, enable uniform grid by default
+            useUniformGridCheckbox.checked = true;
+            gridFreqSelect.disabled = false;
+        }
+    });
+    
+    // Handle uniform grid checkbox
+    useUniformGridCheckbox.addEventListener('change', function() {
+        gridFreqSelect.disabled = !this.checked;
+    });
+    
+    function updateFileFeedback(input, feedbackElement) {
+        if (input.files && input.files[0]) {
+            const fileName = input.files[0].name;
+            const fileSize = formatFileSize(input.files[0].size);
+            feedbackElement.textContent = `${fileName} (${fileSize})`;
+            feedbackElement.classList.add('file-selected');
+        } else {
+            feedbackElement.textContent = 'No file selected';
+            feedbackElement.classList.remove('file-selected');
+        }
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    function validateForm() {
+        let valid = true;
+        
+        // Check if LV file is selected
+        if (!lvFileInput.files || lvFileInput.files.length === 0) {
+            showNotification('Please select an LV file.', 'warning');
+            valid = false;
+        }
+        
+        // Check if GC file is selected
+        if (!gcFileInput.files || gcFileInput.files.length === 0) {
+            showNotification('Please select a GC file.', 'warning');
+            valid = false;
+        }
+        
+        // Check file extensions
+        if (valid) {
+            const lvFileName = lvFileInput.files[0].name;
+            const gcFileName = gcFileInput.files[0].name;
+            
+            if (!lvFileName.toLowerCase().endsWith('.txt')) {
+                showNotification('LV file must be a .txt file.', 'warning');
+                valid = false;
+            }
+            
+            if (!gcFileName.toLowerCase().endsWith('.txt')) {
+                showNotification('GC file must be a .txt file.', 'warning');
+                valid = false;
+            }
+        }
+        
+        return valid;
+    }
+    
+    function showNotification(message, type = 'info') {
+        const notification = document.getElementById('notification');
+        notification.textContent = message;
+        notification.className = `notification ${type}`;
+        notification.style.display = 'block';
+        
+        setTimeout(() => {
+            notification.style.display = 'none';
+        }, 5000);
+    }
+});
+</script>
+{% endblock %} 

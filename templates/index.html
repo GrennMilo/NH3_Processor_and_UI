@@ -1,0 +1,125 @@
+{% extends "layout.html" %}
+
+{% block title %}Home - Skid NH3 Syn. Data Processor{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h2 class="section-title">Dashboard</h2>
+    
+    <div class="dashboard-cards">
+        <div class="dashboard-card">
+            <div class="card-icon">
+                <i class="fas fa-upload"></i>
+            </div>
+            <div class="card-content">
+                <h3>Upload Data</h3>
+                <p>Upload new LV and GC data files for processing</p>
+                <a href="/upload" class="btn-primary">Upload Files</a>
+            </div>
+        </div>
+        
+        <div class="dashboard-card">
+            <div class="card-icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="card-content">
+                <h3>Reports</h3>
+                <p>Browse and manage previously generated reports</p>
+                <a href="/reports" class="btn-primary">View Reports</a>
+            </div>
+        </div>
+        
+        <div class="dashboard-card">
+            <div class="card-icon">
+                <i class="fas fa-eye"></i>
+            </div>
+            <div class="card-content">
+                <h3>Visualize</h3>
+                <p>View and compare data across different experiments</p>
+                <a href="/visualize" class="btn-primary">Visualize Data</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="dashboard-stats">
+        <h2 class="section-title">Quick Stats</h2>
+        <div class="stats-container">
+            <div class="stat-card" id="total-reports-card">
+                <h3>Total Reports</h3>
+                <p class="stat-value" id="total-reports">--</p>
+            </div>
+            <div class="stat-card" id="recent-uploads-card">
+                <h3>Recent Uploads</h3>
+                <p class="stat-value" id="recent-uploads">--</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="recent-reports">
+        <h2 class="section-title">Recent Reports</h2>
+        <div class="recent-reports-list" id="recent-reports-list">
+            <p class="loading-text">Loading recent reports...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch stats and recent reports
+    fetchDashboardData();
+});
+
+function fetchDashboardData() {
+    fetch('/api/dashboard-data')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update stats
+                document.getElementById('total-reports').textContent = data.total_reports || '0';
+                document.getElementById('recent-uploads').textContent = data.recent_uploads || '0';
+                
+                // Update recent reports list
+                const recentReportsList = document.getElementById('recent-reports-list');
+                recentReportsList.innerHTML = '';
+                
+                if (data.recent_reports && data.recent_reports.length > 0) {
+                    const reportsList = document.createElement('ul');
+                    reportsList.className = 'reports-list';
+                    
+                    data.recent_reports.forEach(report => {
+                        const listItem = document.createElement('li');
+                        listItem.className = 'report-item';
+                        
+                        listItem.innerHTML = `
+                            <div class="report-info">
+                                <h4>${report.name}</h4>
+                                <p>Created: ${report.created_at}</p>
+                                <p>Stages: ${report.stages}</p>
+                            </div>
+                            <div class="report-actions">
+                                <a href="/visualize?report=${encodeURIComponent(report.name)}" class="btn-small">
+                                    <i class="fas fa-eye"></i> View
+                                </a>
+                            </div>
+                        `;
+                        
+                        reportsList.appendChild(listItem);
+                    });
+                    
+                    recentReportsList.appendChild(reportsList);
+                } else {
+                    recentReportsList.innerHTML = '<p class="empty-list">No recent reports found.</p>';
+                }
+            } else {
+                showNotification('Error loading dashboard data: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching dashboard data:', error);
+            showNotification('Failed to load dashboard data. Please try again.', 'error');
+        });
+}
+</script>
+{% endblock %} 

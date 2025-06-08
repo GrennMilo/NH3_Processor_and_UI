@@ -1,0 +1,906 @@
+{% extends "layout.html" %}
+
+{% block title %}Reports - Skid NH3 Syn. Data Processor{% endblock %}
+
+{% block head_extras %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="reports-page">
+    <div class="page-header">
+        <h2 class="section-title">Reports Management</h2>
+        <div class="action-buttons">
+            <button id="refresh-reports-btn" class="btn-secondary"><i class="fas fa-sync-alt"></i> Refresh</button>
+        </div>
+    </div>
+    
+    <div class="reports-grid">
+        <!-- Reports list with stats -->
+        <div class="reports-list-container">
+            <h3><i class="fas fa-folder-open"></i> Available Reports</h3>
+            <div class="search-filter">
+                <input type="text" id="reports-search" placeholder="Search reports..." class="search-input">
+            </div>
+            <div class="reports-list" id="reports-list">
+                <p class="loading-text">Loading reports...</p>
+                <!-- Reports will be populated here -->
+            </div>
+        </div>
+        
+        <!-- Report details -->
+        <div class="report-details" id="report-details">
+            <div class="empty-state">
+                <i class="fas fa-chart-line empty-icon"></i>
+                <p>Select a report to view details</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Rename modal dialog -->
+    <div id="rename-report-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Rename Report</h3>
+            <div class="form-group">
+                <label for="new-report-name">New Name:</label>
+                <input type="text" id="new-report-name" placeholder="Enter new report name">
+            </div>
+            <button id="confirm-rename-button" class="btn-primary">Confirm Rename</button>
+        </div>
+    </div>
+    
+    <!-- Report contents modal dialog -->
+    <div id="report-contents-modal" class="modal">
+        <div class="modal-content report-contents-modal">
+            <span class="close-modal">&times;</span>
+            <h3>Report Contents</h3>
+            <div id="report-contents-tree">
+                <p class="loading-text">Loading report contents...</p>
+            </div>
+            <div class="report-contents-actions">
+                <button id="refresh-contents-button" class="btn-secondary"><i class="fas fa-sync-alt"></i> Refresh</button>
+                <button id="close-contents-button" class="btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentReportName = '';
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Load reports list
+    loadReportsList();
+    
+    // Set up event listeners
+    document.getElementById('refresh-reports-btn').addEventListener('click', loadReportsList);
+    
+    // Search functionality
+    document.getElementById('reports-search').addEventListener('input', filterReports);
+    
+    // Close modals when clicking the X
+    document.querySelectorAll('.close-modal').forEach(closeBtn => {
+        closeBtn.addEventListener('click', function() {
+            this.closest('.modal').style.display = 'none';
+        });
+    });
+    
+    // Close contents modal with close button
+    document.getElementById('close-contents-button').addEventListener('click', function() {
+        document.getElementById('report-contents-modal').style.display = 'none';
+    });
+    
+    // Refresh contents
+    document.getElementById('refresh-contents-button').addEventListener('click', function() {
+        if (currentReportName) {
+            loadReportContents(currentReportName);
+        }
+    });
+    
+    // Rename report
+    document.getElementById('confirm-rename-button').addEventListener('click', handleRenameReport);
+});
+
+function loadReportsList() {
+    showLoading(true);
+    
+    fetch('/api/reports')
+        .then(response => response.json())
+        .then(data => {
+            showLoading(false);
+            
+            if (data.success) {
+                renderReportsList(data.reports);
+            } else {
+                showNotification('Error loading reports: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showLoading(false);
+            console.error('Error fetching reports:', error);
+            showNotification('Failed to load reports. Please try again.', 'error');
+        });
+}
+
+function renderReportsList(reports) {
+    const reportsListContainer = document.getElementById('reports-list');
+    reportsListContainer.innerHTML = '';
+    
+    if (!reports || reports.length === 0) {
+        reportsListContainer.innerHTML = '<p class="empty-list">No reports available</p>';
+        return;
+    }
+    
+    reports.forEach(report => {
+        const reportCard = document.createElement('div');
+        reportCard.className = 'report-card';
+        reportCard.dataset.reportName = report.name;
+        
+        reportCard.innerHTML = `
+            <div class="report-card-header">
+                <h4 class="report-name">${report.name}</h4>
+                <div class="report-actions">
+                    <button class="btn-icon view-report-btn" title="View Report Details">
+                        <i class="fas fa-info-circle"></i>
+                    </button>
+                    <button class="btn-icon rename-report-btn" title="Rename Report">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon delete-report-btn" title="Delete Report">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="report-card-meta">
+                <div class="meta-item">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>${report.created_at || 'Unknown'}</span>
+                </div>
+                <div class="meta-item">
+                    <i class="fas fa-layer-group"></i>
+                    <span>${report.stages || '0'} stages</span>
+                </div>
+            </div>
+        `;
+        
+        reportsListContainer.appendChild(reportCard);
+        
+        // Add event listeners
+        reportCard.querySelector('.view-report-btn').addEventListener('click', function() {
+            const reportName = reportCard.dataset.reportName;
+            loadReportDetails(reportName);
+        });
+        
+        reportCard.querySelector('.rename-report-btn').addEventListener('click', function() {
+            const reportName = reportCard.dataset.reportName;
+            showRenameModal(reportName);
+        });
+        
+        reportCard.querySelector('.delete-report-btn').addEventListener('click', function() {
+            const reportName = reportCard.dataset.reportName;
+            confirmDeleteReport(reportName);
+        });
+        
+        // Make the whole card clickable to view details
+        reportCard.addEventListener('click', function(e) {
+            // Only trigger if the click was not on a button
+            if (!e.target.closest('button')) {
+                const reportName = this.dataset.reportName;
+                loadReportDetails(reportName);
+            }
+        });
+    });
+}
+
+function filterReports() {
+    const searchText = document.getElementById('reports-search').value.toLowerCase();
+    const reportCards = document.querySelectorAll('.report-card');
+    
+    reportCards.forEach(card => {
+        const reportName = card.dataset.reportName.toLowerCase();
+        if (reportName.includes(searchText)) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function loadReportDetails(reportName) {
+    if (!reportName) return;
+    
+    currentReportName = reportName;
+    
+    // Show loading state
+    const detailsContainer = document.getElementById('report-details');
+    detailsContainer.innerHTML = '<div class="loading-container"><div class="spinner"></div><p>Loading report details...</p></div>';
+    
+    // Highlight the selected report card
+    document.querySelectorAll('.report-card').forEach(card => {
+        if (card.dataset.reportName === reportName) {
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    });
+    
+    // Fetch report details
+    fetch(`/api/report-stats/${encodeURIComponent(reportName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderReportDetails(reportName, data);
+            } else {
+                detailsContainer.innerHTML = `
+                    <div class="error-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error loading report details: ${data.message}</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching report details:', error);
+            detailsContainer.innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Failed to load report details. Please try again.</p>
+                </div>
+            `;
+        });
+}
+
+function renderReportDetails(reportName, data) {
+    const detailsContainer = document.getElementById('report-details');
+    
+    detailsContainer.innerHTML = `
+        <div class="report-detail-header">
+            <h3>${reportName}</h3>
+            <div class="actions">
+                <a href="/visualize?report=${encodeURIComponent(reportName)}" class="btn-primary">
+                    <i class="fas fa-eye"></i> View Report
+                </a>
+            </div>
+        </div>
+        
+        <div class="report-summary">
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i class="fas fa-calendar-alt"></i>
+                </div>
+                <div class="summary-content">
+                    <h4>Created</h4>
+                    <p>${data.created_at || 'Unknown'}</p>
+                </div>
+            </div>
+            
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i class="fas fa-layer-group"></i>
+                </div>
+                <div class="summary-content">
+                    <h4>Stages</h4>
+                    <p>${data.stages || '0'}</p>
+                </div>
+            </div>
+            
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i class="fas fa-database"></i>
+                </div>
+                <div class="summary-content">
+                    <h4>Data Points</h4>
+                    <p>${data.data_points || '0'}</p>
+                </div>
+            </div>
+            
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="summary-content">
+                    <h4>Files</h4>
+                    <p>${data.files_count || '0'}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="report-actions-panel">
+            <button id="view-contents-btn" class="btn-secondary">
+                <i class="fas fa-folder-open"></i> View Contents
+            </button>
+            ${data.export_url ? 
+                `<a href="${data.export_url}" class="btn-secondary">
+                    <i class="fas fa-download"></i> Export Data
+                </a>` : ''}
+        </div>
+        
+        <div class="stages-preview">
+
+        
+        <div class="stages-detailed-view">
+            <h4>Stages Detailed Statistics</h4>
+            <div class="stats-controls">
+                <button id="toggle-stats-view" class="btn-secondary">
+                    <i class="fas fa-table"></i> Toggle Grid/Chart View
+                </button>
+                <div class="stats-view-options">
+                    <label>
+                        <input type="checkbox" id="show-indicators" checked> 
+                        Show Value Indicators
+                    </label>
+                </div>
+            </div>
+            <div class="stages-stats-table-container">
+                <table class="stages-stats-table">
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th>Points</th>
+                            <th>Duration</th>
+                            <th>Avg. Temp (°C)</th>
+                            <th>Avg. Pressure (bar)</th>
+                            <th>Avg. H₂ Flow (ml/min)</th>
+                            <th>Avg. N₂ Flow (ml/min)</th>
+                            <th>Avg. NH₃ (%)</th>
+                            <th>Avg. Outlet (g/h)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stages-stats-tbody">
+                        ${renderStagesDetailedStats(data.stages_data || [])}
+                    </tbody>
+                </table>
+            </div>
+            <div id="stats-visualization" class="stats-visualization" style="display: none;">
+                <div class="chart-container">
+                    <canvas id="stats-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add event listener for viewing contents
+    document.getElementById('view-contents-btn').addEventListener('click', function() {
+        showContentsModal();
+    });
+}
+
+function renderStagesPreview(stagesData) {
+    if (!stagesData || stagesData.length === 0) {
+        return '<p class="empty-state-text">No stages data available</p>';
+    }
+    
+    let html = '<div class="stages-grid">';
+    
+    stagesData.forEach(stage => {
+        html += `
+            <div class="stage-preview-card">
+                <div class="stage-header">
+                    <h5>Stage ${stage.number}</h5>
+                </div>
+                <div class="stage-stats">
+                    <div class="stage-stat">
+                        <span class="stat-label">Points:</span>
+                        <span class="stat-value">${stage.data_points || '0'}</span>
+                    </div>
+                    <div class="stage-stat">
+                        <span class="stat-label">Duration:</span>
+                        <span class="stat-value">${stage.duration || 'N/A'}</span>
+                    </div>
+                    <div class="stage-stat">
+                        <span class="stat-label">Max Temp:</span>
+                        <span class="stat-value">${stage.max_temp ? stage.max_temp + '°C' : 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+function renderStagesDetailedStats(stagesData) {
+    if (!stagesData || stagesData.length === 0) {
+        return '<tr><td colspan="9" class="empty-state-text">No stages data available</td></tr>';
+    }
+    
+    // Find max values for each metric to create relative visual indicators
+    const maxValues = {
+        data_points: Math.max(...stagesData.map(s => s.data_points || 0)),
+        avg_temp: Math.max(...stagesData.filter(s => s.avg_temp).map(s => s.avg_temp)),
+        avg_pressure: Math.max(...stagesData.filter(s => s.avg_pressure).map(s => s.avg_pressure)),
+        avg_h2_flow: Math.max(...stagesData.filter(s => s.avg_h2_flow).map(s => s.avg_h2_flow)),
+        avg_n2_flow: Math.max(...stagesData.filter(s => s.avg_n2_flow).map(s => s.avg_n2_flow)),
+        avg_nh3: Math.max(...stagesData.filter(s => s.avg_nh3).map(s => s.avg_nh3)),
+        avg_outlet: Math.max(...stagesData.filter(s => s.avg_outlet).map(s => s.avg_outlet))
+    };
+    
+    // Store data for chart visualization
+    window.stagesChartData = {
+        stagesData: stagesData,
+        maxValues: maxValues
+    };
+    
+    let html = '';
+    
+    stagesData.forEach(stage => {
+        // Helper function to create visual indicator bar
+        const createIndicator = (value, maxValue) => {
+            if (!value || !maxValue) return '';
+            const percentage = Math.min(Math.round((value / maxValue) * 100), 100);
+            return `<div class="value-indicator" style="width: ${percentage}%"></div>`;
+        };
+        
+        // Format values with proper precision and handling N/A cases
+        const formatValue = (value, suffix, precision = 1) => {
+            return value ? value.toFixed(precision) + suffix : 'N/A';
+        };
+        
+        html += `
+            <tr data-stage="${stage.number}" class="stage-row">
+                <td><strong>${stage.number}</strong></td>
+                <td class="with-indicator">
+                    ${stage.data_points || '0'}
+                    ${createIndicator(stage.data_points, maxValues.data_points)}
+                </td>
+                <td>${stage.duration || 'N/A'}</td>
+                <td class="with-indicator">
+                    ${formatValue(stage.avg_temp, '°C')}
+                    ${createIndicator(stage.avg_temp, maxValues.avg_temp)}
+                </td>
+                <td class="with-indicator">
+                    ${formatValue(stage.avg_pressure, 'bar', 2)}
+                    ${createIndicator(stage.avg_pressure, maxValues.avg_pressure)}
+                </td>
+                <td class="with-indicator">
+                    ${formatValue(stage.avg_h2_flow, 'ml/min')}
+                    ${createIndicator(stage.avg_h2_flow, maxValues.avg_h2_flow)}
+                </td>
+                <td class="with-indicator">
+                    ${formatValue(stage.avg_n2_flow, 'ml/min')}
+                    ${createIndicator(stage.avg_n2_flow, maxValues.avg_n2_flow)}
+                </td>
+                <td class="with-indicator">
+                    ${formatValue(stage.avg_nh3, '%', 2)}
+                    ${createIndicator(stage.avg_nh3, maxValues.avg_nh3)}
+                </td>
+                <td class="with-indicator">
+                    ${formatValue(stage.avg_outlet, 'g/h', 2)}
+                    ${createIndicator(stage.avg_outlet, maxValues.avg_outlet)}
+                </td>
+            </tr>
+        `;
+    });
+    
+    // Add event listener for the toggle button after rendering
+    setTimeout(() => {
+        const toggleBtn = document.getElementById('toggle-stats-view');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', toggleStatsView);
+        }
+        
+        const showIndicatorsCheckbox = document.getElementById('show-indicators');
+        if (showIndicatorsCheckbox) {
+            showIndicatorsCheckbox.addEventListener('change', function() {
+                const indicators = document.querySelectorAll('.value-indicator');
+                indicators.forEach(indicator => {
+                    indicator.style.display = this.checked ? 'block' : 'none';
+                });
+            });
+        }
+        
+        // Add click event to rows for highlight
+        const rows = document.querySelectorAll('.stage-row');
+        rows.forEach(row => {
+            row.addEventListener('click', function() {
+                const isSelected = this.classList.contains('selected-row');
+                // Remove selected class from all rows
+                document.querySelectorAll('.stage-row').forEach(r => {
+                    r.classList.remove('selected-row');
+                });
+                // Toggle selected class on the clicked row
+                if (!isSelected) {
+                    this.classList.add('selected-row');
+                }
+            });
+        });
+    }, 100);
+    
+    return html;
+}
+
+// Function to toggle between table and chart views
+function toggleStatsView() {
+    const tableContainer = document.querySelector('.stages-stats-table-container');
+    const chartContainer = document.getElementById('stats-visualization');
+    const button = document.getElementById('toggle-stats-view');
+    
+    if (tableContainer.style.display === 'none') {
+        // Switch to table view
+        tableContainer.style.display = 'block';
+        chartContainer.style.display = 'none';
+        button.innerHTML = '<i class="fas fa-chart-bar"></i> Show Chart View';
+    } else {
+        // Switch to chart view
+        tableContainer.style.display = 'none';
+        chartContainer.style.display = 'block';
+        button.innerHTML = '<i class="fas fa-table"></i> Show Table View';
+        renderStagesChart();
+    }
+}
+
+// Function to render a chart visualizing the stage statistics
+function renderStagesChart() {
+    if (!window.stagesChartData || !window.stagesChartData.stagesData) {
+        console.error('No stage data available for chart');
+        return;
+    }
+    
+    const stagesData = window.stagesChartData.stagesData;
+    const canvas = document.getElementById('stats-chart');
+    
+    // Prepare data for Chart.js
+    const labels = stagesData.map(stage => `Stage ${stage.number}`);
+    const datasets = [
+        {
+            label: 'Avg. Temperature (°C)',
+            data: stagesData.map(stage => stage.avg_temp || 0),
+            backgroundColor: 'rgba(255, 99, 132, 0.5)',
+            borderColor: 'rgb(255, 99, 132)',
+            yAxisID: 'y-temperature',
+        },
+        {
+            label: 'Avg. Pressure (bar)',
+            data: stagesData.map(stage => stage.avg_pressure || 0),
+            backgroundColor: 'rgba(153, 102, 255, 0.5)',
+            borderColor: 'rgb(153, 102, 255)',
+            yAxisID: 'y-pressure',
+        },
+        {
+            label: 'Avg. H₂ Flow (ml/min)',
+            data: stagesData.map(stage => stage.avg_h2_flow || 0),
+            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+            borderColor: 'rgb(54, 162, 235)',
+            yAxisID: 'y-flow',
+        },
+        {
+            label: 'Avg. N₂ Flow (ml/min)',
+            data: stagesData.map(stage => stage.avg_n2_flow || 0),
+            backgroundColor: 'rgba(75, 192, 192, 0.5)',
+            borderColor: 'rgb(75, 192, 192)',
+            yAxisID: 'y-flow',
+        },
+        {
+            label: 'Avg. NH₃ (%)',
+            data: stagesData.map(stage => stage.avg_nh3 || 0),
+            backgroundColor: 'rgba(255, 206, 86, 0.5)',
+            borderColor: 'rgb(255, 206, 86)',
+            yAxisID: 'y-concentration',
+        },
+        {
+            label: 'Avg. Outlet (g/h)',
+            data: stagesData.map(stage => stage.avg_outlet || 0),
+            backgroundColor: 'rgba(255, 159, 64, 0.5)',
+            borderColor: 'rgb(255, 159, 64)',
+            yAxisID: 'y-outlet',
+        }
+    ];
+    
+    // Destroy existing chart if it exists
+    if (window.stagesChart) {
+        window.stagesChart.destroy();
+    }
+    
+    // Create new chart
+    window.stagesChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Stage'
+                    }
+                },
+                'y-temperature': {
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Temperature (°C)'
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                'y-pressure': {
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Pressure (bar)'
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                'y-flow': {
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Flow (ml/min)'
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                'y-concentration': {
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'NH₃ Concentration (%)'
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                'y-outlet': {
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Outlet (g/h)'
+                    },
+                    grid: {
+                        display: false
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                },
+                legend: {
+                    position: 'top',
+                }
+            }
+        }
+    });
+}
+
+function showRenameModal(reportName) {
+    if (!reportName) return;
+    
+    currentReportName = reportName;
+    
+    // Set current name as default value
+    document.getElementById('new-report-name').value = reportName;
+    
+    // Show the modal
+    document.getElementById('rename-report-modal').style.display = 'block';
+}
+
+function handleRenameReport() {
+    const oldName = currentReportName;
+    const newName = document.getElementById('new-report-name').value.trim();
+    
+    if (!oldName || !newName) {
+        showNotification('Report name cannot be empty.', 'warning');
+        return;
+    }
+    
+    if (oldName === newName) {
+        document.getElementById('rename-report-modal').style.display = 'none';
+        return;
+    }
+    
+    showLoading(true);
+    
+    fetch('/api/rename-report', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            old_name: oldName,
+            new_name: newName
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        showLoading(false);
+        document.getElementById('rename-report-modal').style.display = 'none';
+        
+        if (data.success) {
+            showNotification(`Report renamed from ${oldName} to ${newName}`, 'success');
+            // Reload reports list
+            loadReportsList();
+            // Clear details if the current report was renamed
+            if (currentReportName === oldName) {
+                currentReportName = newName;
+                loadReportDetails(newName);
+            }
+        } else {
+            showNotification('Error renaming report: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showLoading(false);
+        document.getElementById('rename-report-modal').style.display = 'none';
+        console.error('Error renaming report:', error);
+        showNotification('Failed to rename report. Please try again.', 'error');
+    });
+}
+
+function confirmDeleteReport(reportName) {
+    if (!reportName) return;
+    
+    if (!confirm(`Are you sure you want to delete the report "${reportName}"? This action cannot be undone.`)) {
+        return;
+    }
+    
+    deleteReport(reportName);
+}
+
+function deleteReport(reportName) {
+    showLoading(true);
+    
+    fetch('/api/delete-report', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            report_name: reportName
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        showLoading(false);
+        
+        if (data.success) {
+            showNotification(`Report ${reportName} deleted successfully`, 'success');
+            // Reload reports list
+            loadReportsList();
+            // Clear details if the current report was deleted
+            if (currentReportName === reportName) {
+                currentReportName = '';
+                document.getElementById('report-details').innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-chart-line empty-icon"></i>
+                        <p>Select a report to view details</p>
+                    </div>
+                `;
+            }
+        } else {
+            showNotification('Error deleting report: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showLoading(false);
+        console.error('Error deleting report:', error);
+        showNotification('Failed to delete report. Please try again.', 'error');
+    });
+}
+
+function showContentsModal() {
+    if (!currentReportName) return;
+    
+    // Show modal with loading indicator
+    const modal = document.getElementById('report-contents-modal');
+    document.getElementById('report-contents-tree').innerHTML = '<p class="loading-text">Loading report contents...</p>';
+    modal.style.display = 'block';
+    
+    // Load contents
+    loadReportContents(currentReportName);
+}
+
+function loadReportContents(reportName) {
+    fetch(`/api/report-contents/${encodeURIComponent(reportName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderContentsTree(data.contents);
+            } else {
+                document.getElementById('report-contents-tree').innerHTML = 
+                    `<p class="error-text">Error loading contents: ${data.message}</p>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching report contents:', error);
+            document.getElementById('report-contents-tree').innerHTML = 
+                '<p class="error-text">Failed to load report contents. Please try again.</p>';
+        });
+}
+
+function renderContentsTree(contents) {
+    const treeContainer = document.getElementById('report-contents-tree');
+    treeContainer.innerHTML = '';
+    
+    if (!contents || contents.length === 0) {
+        treeContainer.innerHTML = '<p class="empty-list">No contents found.</p>';
+        return;
+    }
+    
+    const tree = document.createElement('ul');
+    tree.className = 'file-tree';
+    
+    contents.forEach(item => {
+        const listItem = document.createElement('li');
+        listItem.className = `tree-item ${item.type}-item`;
+        
+        if (item.type === 'folder') {
+            listItem.innerHTML = `
+                <div class="folder-name">
+                    <i class="fas fa-folder"></i> ${item.name}
+                </div>
+            `;
+            
+            if (item.children && item.children.length > 0) {
+                const subTree = document.createElement('ul');
+                subTree.className = 'sub-tree';
+                
+                item.children.forEach(child => {
+                    const childItem = document.createElement('li');
+                    childItem.className = `tree-item ${child.type}-item`;
+                    
+                    if (child.type === 'folder') {
+                        childItem.innerHTML = `<div class="folder-name"><i class="fas fa-folder"></i> ${child.name}</div>`;
+                    } else {
+                        childItem.innerHTML = `
+                            <div class="file-name">
+                                <i class="fas fa-file-alt"></i> ${child.name}
+                                <span class="file-size">${child.size || ''}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    subTree.appendChild(childItem);
+                });
+                
+                listItem.appendChild(subTree);
+            }
+        } else {
+            listItem.innerHTML = `
+                <div class="file-name">
+                    <i class="fas fa-file-alt"></i> ${item.name}
+                    <span class="file-size">${item.size || ''}</span>
+                </div>
+            `;
+        }
+        
+        tree.appendChild(listItem);
+    });
+    
+    treeContainer.appendChild(tree);
+}
+
+function showLoading(show) {
+    const loadingIndicator = document.getElementById('loading-indicator');
+    if (show) {
+        loadingIndicator.style.display = 'flex';
+    } else {
+        loadingIndicator.style.display = 'none';
+    }
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.getElementById('notification');
+    notification.textContent = message;
+    notification.className = `notification ${type}`;
+    notification.style.display = 'block';
+    
+    setTimeout(() => {
+        notification.style.display = 'none';
+    }, 5000);
+}
+</script>
+{% endblock %} 
