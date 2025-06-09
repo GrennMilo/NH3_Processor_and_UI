@@ -1,0 +1,63 @@
+/* Add styles for interpolation options */
+.option-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin: 10px 0;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.checkbox-container input[type="checkbox"] {
+    margin: 0;
+}
+
+select#interpolation_kind {
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-light);
+    color: var(--text-primary);
+    font-size: 14px;
+    min-width: 250px;
+}
+
+select#interpolation_kind:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+details {
+    margin-top: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px;
+    background-color: var(--bg-light-secondary);
+}
+
+details summary {
+    cursor: pointer;
+    color: var(--primary-color);
+    font-weight: 500;
+    padding: 4px 0;
+}
+
+.details-content {
+    margin-top: 10px;
+    padding: 10px;
+    border-top: 1px solid var(--border-color);
+    font-size: 14px;
+}
+
+.details-content ul {
+    margin-left: 20px;
+    margin-top: 8px;
+}
+
+.details-content li {
+    margin-bottom: 4px;
+} 

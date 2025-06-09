@@ -3,62 +3,48 @@
 {% block title %}Home - Skid NH3 Syn. Data Processor{% endblock %}
 
 {% block content %}
-<div class="dashboard">
-    <h2 class="section-title">Dashboard</h2>
-    
-    <div class="dashboard-cards">
-        <div class="dashboard-card">
-            <div class="card-icon">
-                <i class="fas fa-upload"></i>
-            </div>
-            <div class="card-content">
-                <h3>Upload Data</h3>
-                <p>Upload new LV and GC data files for processing</p>
-                <a href="/upload" class="btn-primary">Upload Files</a>
-            </div>
-        </div>
-        
-        <div class="dashboard-card">
-            <div class="card-icon">
-                <i class="fas fa-chart-line"></i>
-            </div>
-            <div class="card-content">
-                <h3>Reports</h3>
-                <p>Browse and manage previously generated reports</p>
-                <a href="/reports" class="btn-primary">View Reports</a>
-            </div>
-        </div>
-        
-        <div class="dashboard-card">
-            <div class="card-icon">
-                <i class="fas fa-eye"></i>
-            </div>
-            <div class="card-content">
-                <h3>Visualize</h3>
-                <p>View and compare data across different experiments</p>
-                <a href="/visualize" class="btn-primary">Visualize Data</a>
-            </div>
-        </div>
-    </div>
-    
-    <div class="dashboard-stats">
-        <h2 class="section-title">Quick Stats</h2>
-        <div class="stats-container">
-            <div class="stat-card" id="total-reports-card">
-                <h3>Total Reports</h3>
-                <p class="stat-value" id="total-reports">--</p>
-            </div>
-            <div class="stat-card" id="recent-uploads-card">
-                <h3>Recent Uploads</h3>
-                <p class="stat-value" id="recent-uploads">--</p>
-            </div>
-        </div>
-    </div>
+<div class="main-content">
     
     <div class="recent-reports">
-        <h2 class="section-title">Recent Reports</h2>
-        <div class="recent-reports-list" id="recent-reports-list">
-            <p class="loading-text">Loading recent reports...</p>
+        <h2 class="section-title">Reports Overview</h2>
+        <div class="reports-table-container">
+            <table class="reports-table" id="reports-table">
+                <thead>
+                    <tr>
+                        <th>Report Name</th>
+                        <th>Stages</th>
+                        <th>Data Points</th>
+                        <th>Date Range</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="reports-table-body">
+                    <tr>
+                        <td colspan="5" class="loading-text">Loading reports data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="original-files">
+        <h2 class="section-title">Original Data Files</h2>
+        <div class="files-table-container">
+            <table class="files-table" id="files-table">
+                <thead>
+                    <tr>
+                        <th>File Name</th>
+                        <th>Type</th>
+                        <th>Size</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="files-table-body">
+                    <tr>
+                        <td colspan="4" class="loading-text">Loading files data...</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -67,59 +53,281 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Fetch stats and recent reports
-    fetchDashboardData();
+    // Fetch reports and original files
+    fetchDetailedReportsData();
+    fetchOriginalFiles();
 });
 
-function fetchDashboardData() {
-    fetch('/api/dashboard-data')
-        .then(response => response.json())
+
+
+function fetchDetailedReportsData() {
+    fetch('/api/detailed-reports-list')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
-                // Update stats
-                document.getElementById('total-reports').textContent = data.total_reports || '0';
-                document.getElementById('recent-uploads').textContent = data.recent_uploads || '0';
+                const tableBody = document.getElementById('reports-table-body');
+                tableBody.innerHTML = '';
                 
-                // Update recent reports list
-                const recentReportsList = document.getElementById('recent-reports-list');
-                recentReportsList.innerHTML = '';
-                
-                if (data.recent_reports && data.recent_reports.length > 0) {
-                    const reportsList = document.createElement('ul');
-                    reportsList.className = 'reports-list';
-                    
-                    data.recent_reports.forEach(report => {
-                        const listItem = document.createElement('li');
-                        listItem.className = 'report-item';
+                if (data.reports && data.reports.length > 0) {
+                    data.reports.forEach(report => {
+                        const row = document.createElement('tr');
                         
-                        listItem.innerHTML = `
-                            <div class="report-info">
-                                <h4>${report.name}</h4>
-                                <p>Created: ${report.created_at}</p>
-                                <p>Stages: ${report.stages}</p>
-                            </div>
-                            <div class="report-actions">
-                                <a href="/visualize?report=${encodeURIComponent(report.name)}" class="btn-small">
-                                    <i class="fas fa-eye"></i> View
+                        // Format date range
+                        let dateRange = 'N/A';
+                        if (report.date_start && report.date_end) {
+                            dateRange = formatDateRange(report.date_start, report.date_end);
+                        }
+                        
+                        row.innerHTML = `
+                            <td>${report.name}</td>
+                            <td>${report.stages || 'N/A'}</td>
+                            <td>${report.data_points ? report.data_points.toLocaleString() : 'N/A'}</td>
+                            <td>${dateRange}</td>
+                            <td class="actions-cell">
+                                <a href="/visualize?report=${encodeURIComponent(report.name)}" class="btn-icon" title="View">
+                                    <i class="fas fa-eye"></i>
                                 </a>
-                            </div>
+                                <a href="/static/reports/${encodeURIComponent(report.name)}/overall_merged_data.csv" class="btn-icon" title="Download CSV" download>
+                                    <i class="fas fa-download"></i>
+                                </a>
+                                <a href="#" class="btn-icon report-details-btn" data-report="${encodeURIComponent(report.name)}" title="Details">
+                                    <i class="fas fa-info-circle"></i>
+                                </a>
+                            </td>
                         `;
                         
-                        reportsList.appendChild(listItem);
+                        tableBody.appendChild(row);
                     });
                     
-                    recentReportsList.appendChild(reportsList);
+                    // Add event listeners for detail buttons
+                    document.querySelectorAll('.report-details-btn').forEach(btn => {
+                        btn.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            const reportName = this.getAttribute('data-report');
+                            showReportDetails(reportName);
+                        });
+                    });
                 } else {
-                    recentReportsList.innerHTML = '<p class="empty-list">No recent reports found.</p>';
+                    tableBody.innerHTML = '<tr><td colspan="5" class="empty-text">No reports found.</td></tr>';
                 }
             } else {
-                showNotification('Error loading dashboard data: ' + data.message, 'error');
+                const tableBody = document.getElementById('reports-table-body');
+                tableBody.innerHTML = `<tr><td colspan="5" class="empty-text">Error loading reports: ${data.message || 'Unknown error'}</td></tr>`;
+                console.error('Error from server:', data.message);
             }
         })
         .catch(error => {
-            console.error('Error fetching dashboard data:', error);
-            showNotification('Failed to load dashboard data. Please try again.', 'error');
+            const tableBody = document.getElementById('reports-table-body');
+            tableBody.innerHTML = `<tr><td colspan="5" class="empty-text">Error: ${error.message}</td></tr>`;
+            console.error('Error fetching reports data:', error);
         });
+}
+
+function fetchOriginalFiles() {
+    fetch('/api/original-files')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                const tableBody = document.getElementById('files-table-body');
+                tableBody.innerHTML = '';
+                
+                if (data.files && data.files.length > 0) {
+                    data.files.forEach(file => {
+                        const row = document.createElement('tr');
+                        
+                        // Determine file type
+                        let fileType = 'Unknown';
+                        let fileIcon = 'fa-file';
+                        
+                        if (file.name.toLowerCase().includes('lv') || file.name.toLowerCase().includes('labview')) {
+                            fileType = 'LabVIEW Data';
+                            fileIcon = 'fa-chart-line';
+                        } else if (file.name.toLowerCase().includes('gc') || file.name.toLowerCase().includes('chromatography')) {
+                            fileType = 'GC Data';
+                            fileIcon = 'fa-vial';
+                        }
+                        
+                        row.innerHTML = `
+                            <td><i class="fas ${fileIcon} file-icon"></i> ${file.name}</td>
+                            <td>${fileType}</td>
+                            <td>${file.size}</td>
+                            <td class="actions-cell">
+                                <a href="/download_original_file/${encodeURIComponent(file.name)}" class="btn-icon" title="Download" download>
+                                    <i class="fas fa-download"></i>
+                                </a>
+                            </td>
+                        `;
+                        
+                        tableBody.appendChild(row);
+                    });
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="4" class="empty-text">No original files found.</td></tr>';
+                }
+            } else {
+                const tableBody = document.getElementById('files-table-body');
+                tableBody.innerHTML = `<tr><td colspan="4" class="empty-text">Error loading files: ${data.message || 'Unknown error'}</td></tr>`;
+                console.error('Error from server:', data.message);
+            }
+        })
+        .catch(error => {
+            const tableBody = document.getElementById('files-table-body');
+            tableBody.innerHTML = `<tr><td colspan="4" class="empty-text">Error: ${error.message}</td></tr>`;
+            console.error('Error fetching original files:', error);
+        });
+}
+
+function formatDateRange(startDate, endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    const options = { year: 'numeric', month: 'short', day: 'numeric' };
+    return `${start.toLocaleDateString(undefined, options)} - ${end.toLocaleDateString(undefined, options)}`;
+}
+
+function showReportDetails(reportName) {
+    // Create a modal to display detailed information
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    
+    // Add loading content
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Report Details: ${reportName}</h2>
+            <div class="report-details">
+                <p class="loading-text">Loading report details...</p>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Show the modal
+    setTimeout(() => {
+        modal.classList.add('show');
+    }, 10);
+    
+    // Close modal functionality
+    const closeBtn = modal.querySelector('.close-modal');
+    closeBtn.addEventListener('click', () => {
+        modal.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(modal);
+        }, 300);
+    });
+    
+    // Close when clicking outside
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(modal);
+            }, 300);
+        }
+    });
+    
+    // Fetch report details
+    fetch(`/api/report-stats/${reportName}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                let stagesHtml = '';
+                if (data.stages_data && data.stages_data.length > 0) {
+                    stagesHtml = `
+                        <h3>Stages Information</h3>
+                        <div class="stages-stats-table-container">
+                            <table class="stages-stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>Stage</th>
+                                        <th>Data Points</th>
+                                        <th>Duration</th>
+                                        <th>Avg. T Heater 1 (°C)</th>
+                                        <th>Avg. Pressure (bar)</th>
+                                        <th>Avg. H₂ Flow (ml/min)</th>
+                                        <th>Avg. N₂ Flow (ml/min)</th>
+                                        <th>Avg. NH₃ (%)</th>
+                                        <th>Avg. Outlet Flow (g/h)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+                    
+                    data.stages_data.forEach(stage => {
+                        stagesHtml += `
+                            <tr>
+                                <td>${stage.number}</td>
+                                <td>${stage.data_points || 'N/A'}</td>
+                                <td>${stage.duration || 'N/A'}</td>
+                                <td>${stage.avg_temp !== null ? stage.avg_temp.toFixed(1) : 'N/A'}</td>
+                                <td>${stage.avg_pressure !== null ? stage.avg_pressure.toFixed(2) : 'N/A'}</td>
+                                <td>${stage.avg_h2_flow !== null ? stage.avg_h2_flow.toFixed(2) : 'N/A'}</td>
+                                <td>${stage.avg_n2_flow !== null ? stage.avg_n2_flow.toFixed(2) : 'N/A'}</td>
+                                <td>${stage.avg_nh3 !== null ? stage.avg_nh3.toFixed(2) : 'N/A'}</td>
+                                <td>${stage.avg_outlet !== null ? stage.avg_outlet.toFixed(2) : 'N/A'}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    stagesHtml += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }
+                
+                const detailsHtml = `
+                    <div class="report-meta">
+                        <p><strong>Created:</strong> ${data.created_at || 'N/A'}</p>
+                        <p><strong>Total Data Points:</strong> ${data.data_points ? data.data_points.toLocaleString() : 'N/A'}</p>
+                        <p><strong>Total Stages:</strong> ${data.stages || 'N/A'}</p>
+                        <p><strong>Files Count:</strong> ${data.files_count || 'N/A'}</p>
+                        <p><strong>Total Size:</strong> ${formatSize(data.total_size) || 'N/A'}</p>
+                    </div>
+                    ${stagesHtml}
+                `;
+                
+                modal.querySelector('.report-details').innerHTML = detailsHtml;
+            } else {
+                modal.querySelector('.report-details').innerHTML = `
+                    <div class="error-message">
+                        <p>Error loading report details: ${data.message || 'Unknown error'}</p>
+                    </div>
+                `;
+                console.error('Error from server:', data.message);
+            }
+        })
+        .catch(error => {
+            modal.querySelector('.report-details').innerHTML = `
+                <div class="error-message">
+                    <p>Error: ${error.message}</p>
+                </div>
+            `;
+            console.error('Error fetching report details:', error);
+        });
+}
+
+function formatSize(bytes) {
+    if (!bytes || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 </script>
 {% endblock %} 

@@ -37,33 +37,6 @@
         </div>
     </div>
     
-    <!-- GC Analysis Section (initially hidden) -->
-    <div id="gc-analysis-section" class="visualization-section" style="display: none;">
-        <div class="section-header">
-            <h3>GC Data Analysis</h3>
-        </div>
-        <div class="gc-analysis-container">
-            <div class="gc-plots-row">
-                <div class="gc-plot-container">
-                    <h4>GC Data and Interpolation</h4>
-                    <img id="gc-plot-img" class="gc-plot-image" src="" alt="GC Data Interpolation Plot">
-                </div>
-                <div class="gc-plot-container">
-                    <h4>GC/LV Data Comparison</h4>
-                    <img id="gc-lv-comparison-img" class="gc-plot-image" src="" alt="GC/LV Comparison Plot">
-                </div>
-            </div>
-            <div class="gc-description">
-                <p>The GC data plots show:</p>
-                <ul>
-                    <li><strong>GC Data and Interpolation:</strong> Shows the original GC data points for H2, N2, and NH3 with interpolated curves.</li>
-                    <li><strong>GC/LV Comparison:</strong> Compares the GC data with the LV flow measurements to show correlation between the datasets.</li>
-                </ul>
-                <p>The interpolated GC data is integrated into all plots and data files for comprehensive analysis.</p>
-            </div>
-        </div>
-    </div>
-    
     <!-- Stages Section (initially hidden) -->
     <div id="stages-section" class="visualization-section" style="display: none;">
         <div class="section-header">
@@ -281,32 +254,6 @@ function displayReportData(data) {
         overallSection.style.display = 'none';
     }
     
-    // Show GC analysis section if available
-    const gcSection = document.getElementById('gc-analysis-section');
-    if (data.gc_plot_path || data.gc_lv_comparison_path) {
-        // Set the plot images
-        const gcPlotImg = document.getElementById('gc-plot-img');
-        const gcLvComparisonImg = document.getElementById('gc-lv-comparison-img');
-        
-        if (data.gc_plot_path) {
-            gcPlotImg.src = `/${data.gc_plot_path}`;
-            gcPlotImg.parentElement.style.display = 'block';
-        } else {
-            gcPlotImg.parentElement.style.display = 'none';
-        }
-        
-        if (data.gc_lv_comparison_path) {
-            gcLvComparisonImg.src = `/${data.gc_lv_comparison_path}`;
-            gcLvComparisonImg.parentElement.style.display = 'block';
-        } else {
-            gcLvComparisonImg.parentElement.style.display = 'none';
-        }
-        
-        gcSection.style.display = 'block';
-    } else {
-        gcSection.style.display = 'none';
-    }
-    
     // Show stages section if available
     const stagesSection = document.getElementById('stages-section');
     if (data.step_reports && data.step_reports.length > 0) {
@@ -330,7 +277,116 @@ function loadPlotlyJSON(jsonPath, container) {
         .then(response => response.json())
         .then(plotData => {
             container.innerHTML = '';
-            Plotly.newPlot(container, plotData.data, plotData.layout);
+            
+            // Create controls container above the plot
+            const controlsContainer = document.createElement('div');
+            controlsContainer.className = 'plot-controls';
+            controlsContainer.innerHTML = `
+                <div class="control-buttons">
+                    <button class="btn-small btn-control" id="${container.id}-autoscale">
+                        <i class="fas fa-arrows-alt-v"></i> Autoscale Y-Axes
+                    </button>
+                    <button class="btn-small btn-control" id="${container.id}-toggle-lines" data-lines-hidden="false">
+                        <i class="fas fa-grip-lines-vertical"></i> Hide Stage Lines
+                    </button>
+                </div>
+            `;
+            container.appendChild(controlsContainer);
+            
+            // Create the plot container div
+            const plotContainer = document.createElement('div');
+            plotContainer.className = 'plotly-container';
+            container.appendChild(plotContainer);
+            
+            // Check current theme
+            const isLightTheme = document.body.classList.contains('light-theme');
+            const stageLineColor = isLightTheme ? '#000000' : '#ffffff';
+            
+            // Update stage line colors in shapes if present
+            if (plotData.layout && plotData.layout.shapes) {
+                plotData.layout.shapes.forEach(shape => {
+                    if (shape.type === 'line' && shape.x0 === shape.x1 && shape.y0 !== shape.y1) {
+                        shape.line.color = stageLineColor;
+                    }
+                });
+            }
+            
+            // Adjust height for cross-comparison plots
+            if (container.id === 'cross-comparison-plot-container') {
+                if (plotData.layout) {
+                    plotData.layout.height = 800; // Taller height for cross-comparison plot
+                }
+            }
+            
+            // Create the Plotly plot
+            Plotly.newPlot(plotContainer, plotData.data, plotData.layout, {responsive: true});
+            
+            // Store a reference to the plot div for later access
+            const plotDiv = plotContainer;
+            
+            // Save original data for resetting
+            plotDiv.originalData = JSON.parse(JSON.stringify(plotData.data));
+            plotDiv.originalLayout = JSON.parse(JSON.stringify(plotData.layout));
+            
+            // Apply layout enhancements
+            enhancePlotlyLayout(plotDiv);
+            
+            // Set up autoscale button functionality
+            document.getElementById(`${container.id}-autoscale`).addEventListener('click', function() {
+                const update = {};
+                
+                // Get all y-axes from the layout
+                const axes = Object.keys(plotDiv._fullLayout).filter(key => key.startsWith('yaxis'));
+                
+                // Set autorange=true for all y-axes
+                axes.forEach(axis => {
+                    update[`${axis}.autorange`] = true;
+                });
+                
+                // Apply the update
+                Plotly.relayout(plotDiv, update);
+            });
+            
+            // Set up toggle stage division lines button functionality
+            document.getElementById(`${container.id}-toggle-lines`).addEventListener('click', function() {
+                // Get current layout and shapes
+                const currentLayout = plotDiv._fullLayout;
+                const shapes = currentLayout.shapes || [];
+                
+                // Check if we have shapes (stage division lines)
+                if (shapes.length > 0) {
+                    // Find shapes that are likely stage division lines (vertical lines)
+                    const stageLineIndices = [];
+                    shapes.forEach((shape, index) => {
+                        // Vertical lines would have x0 === x1 and y0 !== y1
+                        if (shape.type === 'line' && shape.x0 === shape.x1 && shape.y0 !== shape.y1) {
+                            stageLineIndices.push(index);
+                        }
+                    });
+                    
+                    if (stageLineIndices.length > 0) {
+                        // Get current visibility state from button's data attribute
+                        const btn = this;
+                        const linesHidden = btn.getAttribute('data-lines-hidden') === 'true';
+                        
+                        // Prepare update object for Plotly.relayout
+                        const update = {};
+                        stageLineIndices.forEach(idx => {
+                            // Toggle visibility (visible when linesHidden is true, hidden when linesHidden is false)
+                            update[`shapes[${idx}].visible`] = linesHidden;
+                        });
+                        
+                        // Apply the update
+                        Plotly.relayout(plotDiv, update);
+                        
+                        // Update button text and data attribute
+                        btn.setAttribute('data-lines-hidden', !linesHidden);
+                        btn.innerHTML = linesHidden ? 
+                            '<i class="fas fa-grip-lines-vertical"></i> Hide Stage Lines' : 
+                            '<i class="fas fa-grip-lines-vertical"></i> Show Stage Lines';
+                    }
+                }
+            });
         })
         .catch(error => {
             console.error('Error loading plot:', error);
@@ -426,6 +482,12 @@ function compareSelectedStages() {
     const comparisonPrefix = document.getElementById('comparison-prefix-input').value.trim();
     const reportTimestamp = document.getElementById('report-select').value;
     
+    console.log('Comparing stages with request data:', {
+        timestamp: reportTimestamp,
+        stages: selectedStages.map(stage => stage.stageNumber),
+        comparison_prefix: comparisonPrefix
+    });
+    
     showLoading(true);
     
     fetch('/compare_stages', {
@@ -439,9 +501,16 @@ function compareSelectedStages() {
             comparison_prefix: comparisonPrefix
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Initial response status:', response.status);
+        return response.json().catch(error => {
+            console.error('Error parsing JSON response:', error);
+            throw new Error('Failed to parse server response. Check console for details.');
+        });
+    })
     .then(data => {
         showLoading(false);
+        console.log('Response data:', data);
         
         if (data.success) {
             // Show comparison plot container
@@ -457,7 +526,7 @@ function compareSelectedStages() {
     .catch(error => {
         showLoading(false);
         console.error('Error comparing stages:', error);
-        showNotification('Failed to generate comparison. Please try again.', 'error');
+        showNotification('Failed to generate comparison. Please try again. Error: ' + error.message, 'error');
     });
 }
 
@@ -636,62 +705,84 @@ function showNotification(message, type = 'info') {
 </script>
 
 <style>
-/* GC Analysis Styles */
-.gc-analysis-container {
-    margin-top: 15px;
-}
-
-.gc-plots-row {
+/* Plot Control Styles */
+.plot-controls {
+    margin-bottom: 10px;
     display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
-.gc-plot-container {
-    flex: 1;
-    min-width: 300px;
+.control-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-control {
     background-color: #272c36;
-    border-radius: 6px;
-    padding: 15px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.gc-plot-container h4 {
-    margin-top: 0;
-    margin-bottom: 15px;
     color: #e1e3e8;
-    font-size: 16px;
-    text-align: center;
-}
-
-.gc-plot-image {
-    width: 100%;
+    border: 1px solid #495057;
     border-radius: 4px;
-    object-fit: contain;
-    max-height: 400px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
-.gc-description {
-    margin-top: 20px;
-    background-color: #272c36;
-    border-radius: 6px;
+.btn-control:hover {
+    background-color: #3a3f4b;
+    border-color: #6c757d;
+}
+
+.btn-control i {
+    margin-right: 5px;
+}
+
+.plotly-container {
+    width: 100%;
+    height: 100%;
+    min-height: 550px;
+}
+
+/* Additional styling for plot containers to make them wider */
+.plot-container {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Adjust section padding to maximize available space */
+.visualization-section {
     padding: 15px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    margin-bottom: 20px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-.gc-description p {
-    margin-top: 0;
-    color: #e1e3e8;
+/* Ensure the overall container uses full width */
+.visualize-page {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0;
 }
 
-.gc-description ul {
-    padding-left: 20px;
+/* Cross-comparison plot specific styles */
+#cross-comparison-plot-container .plotly-container {
+    min-height: 800px; /* Increased height for cross-comparison plots */
 }
 
-.gc-description li {
-    margin-bottom: 8px;
-    color: #e1e3e8;
+/* Light theme overrides */
+body.light-theme .btn-control {
+    background-color: #f8f9fa;
+    color: #343a40;
+    border-color: #ced4da;
+}
+
+body.light-theme .btn-control:hover {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
 }
 </style>
 {% endblock %} 

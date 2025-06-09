@@ -554,18 +554,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 if (plotData.layout.legend) {
                     if(!plotData.layout.legend) plotData.layout.legend = {};
-                    plotData.layout.legend.bgcolor = themeColors.legend_bgcolor;
-                    plotData.layout.legend.bordercolor = themeColors.legend_bordercolor;
-                    plotData.layout.legend.font = { color: themeColors.legend_font_color };
+                    plotData.layout.legend.font = { color: themeColors.font_color };
+                }
+                
+                // Apply dark theme to annotation text
+                if (plotData.layout.annotations && Array.isArray(plotData.layout.annotations)) {
+                    plotData.layout.annotations.forEach(annotation => {
+                        if (!annotation.font) annotation.font = {};
+                        annotation.font.color = themeColors.font_color;
+                    });
                 }
 
-                Plotly.newPlot(targetDivElement, plotData.data, plotData.layout, {responsive: true});
-                targetDivElement.dataset.currentPlotPath = plotJsonPath; // Store path for re-rendering on theme change
+                Plotly.newPlot(
+                    targetDivElement, 
+                    plotData.data, 
+                    plotData.layout,
+                    {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ['sendDataToCloud']
+                    }
+                );
+                
+                // Apply our enhanced layout after rendering to improve axis positioning and scaling
+                if (typeof enhancePlotlyLayout === 'function') {
+                    enhancePlotlyLayout(targetDivElement);
+                }
+                
             })
             .catch(error => {
-                console.error(`Error fetching/plotting for ${plotJsonPath}:`, error);
-                targetDivElement.textContent = `Error loading plot: ${error.message}`;
-                targetDivElement.style.color = '#f8d7da';
+                console.error('Error fetching or rendering Plotly plot:', error);
+                targetDivElement.innerHTML = `
+                    <div class="alert alert-danger">
+                        Failed to load plot: ${error.message}
+                    </div>
+                `;
             });
     }
 
