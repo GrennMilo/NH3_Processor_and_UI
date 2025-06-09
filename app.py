@@ -2078,7 +2078,7 @@ def get_step_data_points(experiment_id, step_id):
     
     # Initialize database
     db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
-    db = NH3SynthDatabase(db_path)
+    db = NH3SynthDatabaseProcessor(db_path=db_path)
     
     # Get data points
     data_points = db.get_step_data_points(step_id, limit, offset)
@@ -2090,7 +2090,7 @@ def export_step_data_csv(experiment_id, step_id):
     """Export step data points to CSV."""
     # Initialize database
     db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
-    db = NH3SynthDatabase(db_path)
+    db = NH3SynthDatabaseProcessor(db_path=db_path)
     
     # Get experiment to use in filename
     experiment = db.get_experiment_by_id(experiment_id)
@@ -2119,7 +2119,7 @@ def export_step_data_json(experiment_id, step_id):
     """Export step data points to JSON."""
     # Initialize database
     db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
-    db = NH3SynthDatabase(db_path)
+    db = NH3SynthDatabaseProcessor(db_path=db_path)
     
     # Get experiment to use in filename
     experiment = db.get_experiment_by_id(experiment_id)
@@ -2148,7 +2148,7 @@ def download_step_data_csv(experiment_id, step_id):
     """Download step data points as CSV."""
     # Initialize database
     db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
-    db = NH3SynthDatabase(db_path)
+    db = NH3SynthDatabaseProcessor(db_path=db_path)
     
     # Get experiment to use in filename
     experiment = db.get_experiment_by_id(experiment_id)
@@ -2171,7 +2171,7 @@ def download_step_data_json(experiment_id, step_id):
     """Download step data points as JSON."""
     # Initialize database
     db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
-    db = NH3SynthDatabase(db_path)
+    db = NH3SynthDatabaseProcessor(db_path=db_path)
     
     # Get experiment to use in filename
     experiment = db.get_experiment_by_id(experiment_id)

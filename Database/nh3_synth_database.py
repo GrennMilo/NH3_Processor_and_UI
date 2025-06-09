@@ -17,7 +17,7 @@ from pathlib import Path
 from datetime import datetime
 import logging
 from typing import Dict, List, Any, Union, Optional, Tuple
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from Database.database_models import (
     init_db, get_session, Base, 
     Experiment, PlotSummary, ExperimentStep, StepDataPoint
