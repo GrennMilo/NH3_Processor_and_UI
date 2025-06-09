@@ -313,7 +313,7 @@
         </div>
     </div>
     
-    <div id="upload-status-card" class="card status-card" style="display: none;">
+    <div id="upload-status-card" class="card status-card d-none">
         <div class="card-header">
             <h3><i class="fas fa-tasks"></i> Processing Status</h3>
         </div>
@@ -324,7 +324,7 @@
                     <div class="progress-fill"></div>
                 </div>
             </div>
-            <div id="result-links-container" class="result-links" style="display: none;"></div>
+            <div id="result-links-container" class="result-links d-none"></div>
         </div>
     </div>
 </div>
@@ -353,9 +353,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle processing mode change
     function updateProcessingMode() {
         if (modeAddToExisting.checked) {
-            existingReportSelection.style.display = 'block';
+            existingReportSelection.classList.add('d-block');
+            existingReportSelection.classList.remove('d-none');
             existingReportSelect.disabled = false;
-            catalystMetadataCard.style.display = 'none';
+            catalystMetadataCard.classList.add('d-none');
             
             // When adding to existing report, remove required attribute from metadata fields
             document.querySelectorAll('.catalyst-metadata-card input[required], .catalyst-metadata-card select[required]').forEach(field => {
@@ -367,9 +368,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 loadExistingReports();
             }
         } else {
-            existingReportSelection.style.display = 'none';
+            existingReportSelection.classList.add('d-none');
+            existingReportSelection.classList.remove('d-block');
             existingReportSelect.disabled = true;
-            catalystMetadataCard.style.display = 'block';
+            catalystMetadataCard.classList.remove('d-none');
             
             // When creating new report, add required attribute back to metadata fields
             const requiredFields = [
@@ -432,7 +434,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('reset-btn').addEventListener('click', function() {
         lvFileFeedback.textContent = 'No file selected';
         gcFileFeedback.textContent = 'No file selected';
-        uploadStatusCard.style.display = 'none';
+        uploadStatusCard.classList.add('d-none');
     });
     
     // Form submission
@@ -444,11 +446,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Show status card and reset previous results
-        uploadStatusCard.style.display = 'block';
+        uploadStatusCard.classList.remove('d-none');
+        uploadStatusCard.classList.add('d-block');
         uploadStatusMessage.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading files...';
         uploadStatusMessage.className = 'status-message info';
         progressBar.style.width = '0%';
-        resultLinksContainer.style.display = 'none';
+        resultLinksContainer.classList.add('d-none');
         resultLinksContainer.innerHTML = '';
         
         // Start upload progress animation
@@ -547,6 +550,8 @@ document.addEventListener('DOMContentLoaded', function() {
             uniformGridContainer.classList.add('show');
         } else {
             uniformGridContainer.classList.remove('show');
+        }
+        
         // If interpolation is disabled, also disable uniform grid options
         if (!this.checked) {
             useUniformGridCheckbox.checked = false;
@@ -603,7 +608,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Reset validation messages
         uploadStatusMessage.textContent = '';
-        uploadStatusCard.classList.remove('show');
+        uploadStatusCard.classList.remove('d-block');
+        uploadStatusCard.classList.add('d-none');
         
         // Remove any previous error classes
         document.querySelectorAll('.error').forEach(el => {
@@ -668,7 +674,8 @@ document.addEventListener('DOMContentLoaded', function() {
             uploadStatusCard.classList.remove('success');
             uploadStatusCard.classList.add('error');
             uploadStatusMessage.textContent = errorMessage;
-            uploadStatusCard.classList.add('show');
+            uploadStatusCard.classList.remove('d-none');
+            uploadStatusCard.classList.add('d-block');
         }
         
         return valid;
@@ -719,15 +726,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 resultLinksContainer.appendChild(csvLink);
             }
             
-            resultLinksContainer.classList.add('show');
+            resultLinksContainer.classList.remove('d-none');
+            resultLinksContainer.classList.add('d-block');
         } else {
             uploadStatusCard.classList.remove('success');
             uploadStatusCard.classList.add('error');
             uploadStatusMessage.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${data.message}`;
-            resultLinksContainer.classList.remove('show');
+            resultLinksContainer.classList.remove('d-block');
+            resultLinksContainer.classList.add('d-none');
         }
         
-        uploadStatusCard.classList.add('show');
+        uploadStatusCard.classList.remove('d-none');
+        uploadStatusCard.classList.add('d-block');
     }
 });
 </script>

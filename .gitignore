@@ -1,54 +1,55 @@
-# Byte-compiled / optimized / DLL files
+# Python cache files
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
-*.so
 
 # Distribution / packaging
 dist/
 build/
 *.egg-info/
 
-# Virtual environments
+# Virtual environment
 venv/
 env/
 ENV/
 
-# IDE specific files
-.idea/
+# Database files
+*.db
+database/*.db
+database/*.sqlite
+
+# Logs
+logs/
+*.log
+
+# Report data (might be large)
+static/reports/*
+!static/reports/.gitkeep
+
+# Uploads directory (user uploads)
+uploads/*
+!uploads/.gitkeep
+
+# Original data files
+static/original_files/*
+!static/original_files/.gitkeep
+
+# Data Light directory (temporary data)
+data Light/
+
+# Local configuration
+instance/
+.env
+
+# IDE files
 .vscode/
+.idea/
 *.swp
 *.swo
 
-# Database files
-Database/*.db
-*.db
-
-# OS specific
-.DS_Store
+# Windows specific
 Thumbs.db
+desktop.ini
 
-# Logs
-*.log
-
-# Local development settings
-.env
-
-# Temporary files
-tmp/
-temp/
-
-# Data and generated files
-/uploads/*
-!/uploads/.gitkeep
-/static/reports/*
-!/static/reports/.gitkeep
-
-# Environment variables
-.env.*
-!.env.example
-
-# Jupyter Notebooks
-.ipynb_checkpoints 
+# macOS specific
+.DS_Store 

@@ -132,10 +132,32 @@ function initThemeSwitcher() {
  */
 function updatePlotsForThemeChange() {
     // Find all Plotly containers
-    const plotlyContainers = document.querySelectorAll('.plotly-container');
+    const plotlyContainers = document.querySelectorAll('.js-plotly-plot');
     
     // Apply the enhancePlotlyLayout function to each container
     plotlyContainers.forEach(container => {
+        if (container && container._fullLayout) {
+            enhancePlotlyLayout(container);
+        }
+    });
+    
+    // Also find any plots that might be created with different class names
+    const otherPlotContainers = document.querySelectorAll('.plotly-plot-container, .plotly-container');
+    otherPlotContainers.forEach(container => {
+        if (container && container._fullLayout) {
+            enhancePlotlyLayout(container);
+        }
+    });
+    
+    // Check for chart containers with different IDs
+    const specificPlotContainers = [
+        document.getElementById('overall-plot-div'),
+        document.getElementById('comparison-plot-div'),
+        document.getElementById('cross-comparison-plot-div'),
+        document.getElementById('data-points-chart-container')
+    ];
+    
+    specificPlotContainers.forEach(container => {
         if (container && container._fullLayout) {
             enhancePlotlyLayout(container);
         }

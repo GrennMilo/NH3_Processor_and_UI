@@ -98,6 +98,9 @@ function fetchDetailedReportsData() {
                                 <a href="#" class="btn-icon report-details-btn" data-report="${encodeURIComponent(report.name)}" title="Details">
                                     <i class="fas fa-info-circle"></i>
                                 </a>
+                                <button class="btn-icon add-to-db-btn" data-report="${encodeURIComponent(report.name)}" title="Add to Database">
+                                    <i class="fas fa-database"></i>
+                                </button>
                             </td>
                         `;
                         
@@ -110,6 +113,14 @@ function fetchDetailedReportsData() {
                             e.preventDefault();
                             const reportName = this.getAttribute('data-report');
                             showReportDetails(reportName);
+                        });
+                    });
+                    
+                    // Add event listeners for add to database buttons
+                    document.querySelectorAll('.add-to-db-btn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const reportName = this.getAttribute('data-report');
+                            addToDatabase(reportName, this);
                         });
                     });
                 } else {
@@ -192,6 +203,91 @@ function formatDateRange(startDate, endDate) {
     
     const options = { year: 'numeric', month: 'short', day: 'numeric' };
     return `${start.toLocaleDateString(undefined, options)} - ${end.toLocaleDateString(undefined, options)}`;
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <span class="notification-message">${message}</span>
+        <button class="notification-close">×</button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Add event listener to close button
+    notification.querySelector('.notification-close').addEventListener('click', function() {
+        notification.classList.add('hiding');
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    });
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (document.body.contains(notification)) {
+            notification.classList.add('hiding');
+            setTimeout(() => {
+                notification.remove();
+            }, 300);
+        }
+    }, 5000);
+    
+    // Add after a small delay to trigger animation
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+}
+
+function addToDatabase(reportName, buttonElement) {
+    // Show loading state
+    const originalHTML = buttonElement.innerHTML;
+    buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    buttonElement.disabled = true;
+    
+    fetch(`/api/database/add-to-database/${encodeURIComponent(reportName)}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Reset button
+        buttonElement.disabled = false;
+        
+        if (data.success) {
+            // Success
+            buttonElement.innerHTML = '<i class="fas fa-check"></i>';
+            buttonElement.classList.add('success');
+            showNotification(`Added ${reportName} to database successfully`, 'success');
+            
+            // Disable button after successful addition
+            setTimeout(() => {
+                buttonElement.disabled = true;
+                buttonElement.title = 'Already in database';
+            }, 1500);
+        } else {
+            // Error
+            buttonElement.innerHTML = originalHTML;
+            
+            // Check if it's already in the database (HTTP 409 Conflict)
+            if (data.message && data.message.includes('already exists')) {
+                showNotification(`${reportName} is already in the database`, 'warning');
+                buttonElement.disabled = true;
+                buttonElement.title = 'Already in database';
+            } else {
+                showNotification(`Error: ${data.message}`, 'error');
+            }
+        }
+    })
+    .catch(error => {
+        // Network or other error
+        buttonElement.innerHTML = originalHTML;
+        buttonElement.disabled = false;
+        showNotification(`Error: ${error.message}`, 'error');
+        console.error('Error adding to database:', error);
+    });
 }
 
 function showReportDetails(reportName) {

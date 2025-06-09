@@ -19,6 +19,14 @@
     --error-color: #e74c3c;
     --info-color: #3498db;
     
+    /* Chart Colors - Dark Theme (Default) */
+    --chart-paper-bgcolor: #1e1e1e;
+    --chart-plot-bgcolor: #252525;
+    --chart-font-color: #e1e3e8;
+    --chart-gridcolor: #303030;
+    --chart-linecolor: #3b3b3b;
+    --chart-zerolinecolor: #505050;
+    
     /* Spacing */
     --spacing-xs: 0.25rem;
     --spacing-sm: 0.5rem;
@@ -52,6 +60,14 @@
     --text-secondary: #6c757d;
     --border-color: #dee2e6;
     /* Accent colors stay the same for consistency */
+    
+    /* Chart Colors - Light Theme */
+    --chart-paper-bgcolor: #ffffff;
+    --chart-plot-bgcolor: #f8f9fa;
+    --chart-font-color: #212529;
+    --chart-gridcolor: #e9ecef;
+    --chart-linecolor: #dee2e6;
+    --chart-zerolinecolor: #adb5bd;
 }
 
 /* Base Styles */
@@ -313,7 +329,7 @@ button[type="submit"] {
     justify-content: center;
     align-items: center;
     z-index: 1000;
-    color: white;
+    color: var(--text-primary);
 }
 
 .spinner {
@@ -2285,4 +2301,35 @@ label.form-check-label {
 
 .show-inline {
     display: inline-block !important;
+}
+
+/* Fix for data points chart container */
+#data-points-chart-container {
+    margin-bottom: 1.5rem;
+}
+
+#data-points-chart-container canvas {
+    width: 100%;
+    height: 300px;
+}
+
+/* Additional utility classes for handling inline styles */
+.d-none {
+    display: none !important;
+}
+
+.d-block {
+    display: block !important;
+}
+
+.d-flex {
+    display: flex !important;
+}
+
+.margin-top-med {
+    margin-top: 1rem !important;
+}
+
+.text-center {
+    text-align: center !important;
 }
