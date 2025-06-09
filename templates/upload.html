@@ -16,6 +16,33 @@
         <div class="card-body">
             <form id="upload-form" enctype="multipart/form-data">
                 <div class="form-group">
+                    <label>
+                        <i class="fas fa-file-upload"></i> Processing Mode <span class="required">*</span>
+                    </label>
+                    <div class="option-container">
+                        <div class="radio-container">
+                            <input type="radio" id="mode_new_report" name="processing_mode" value="new" checked>
+                            <label for="mode_new_report">Create New Report</label>
+                        </div>
+                        <div class="radio-container">
+                            <input type="radio" id="mode_add_to_existing" name="processing_mode" value="add">
+                            <label for="mode_add_to_existing">Add to Existing Report</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="existing-report-selection" style="display: none;">
+                    <div class="form-group">
+                        <label for="existing_report">
+                            <i class="fas fa-folder-open"></i> Select Existing Report <span class="required">*</span>
+                        </label>
+                        <select id="existing_report" name="existing_report" disabled>
+                            <option value="" disabled selected>Loading reports...</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
                     <label for="lv_file">
                         <i class="fas fa-file-alt"></i> LV File <span class="required">*</span>
                     </label>
@@ -41,13 +68,112 @@
                     </div>
                 </div>
                 
-                <div class="form-group">
-                    <label for="report_prefix_text_input">
-                        <i class="fas fa-tag"></i> Report Name Prefix (Optional)
-                    </label>
-                    <input type="text" id="report_prefix_text_input" name="report_prefix_text" placeholder="e.g., ExperimentA">
-                    <div class="input-description">
-                        <p>Add a custom prefix to your report folder name for easier identification.</p>
+                <!-- Catalyst Metadata Section -->
+                <div class="card catalyst-metadata-card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-flask"></i> Catalyst Metadata <span class="required">*</span></h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="metadata-grid">
+                            <div class="form-group">
+                                <label for="experiment_number">
+                                    <i class="fas fa-hashtag"></i> Experiment Number <span class="required">*</span>
+                                </label>
+                                <input type="text" id="experiment_number" name="experiment_number" required placeholder="e.g., Exp01">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="catalyst_batch">
+                                    <i class="fas fa-box"></i> Catalyst Batch <span class="required">*</span>
+                                </label>
+                                <input type="text" id="catalyst_batch" name="catalyst_batch" required placeholder="e.g., Batch123">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="reactor_number">
+                                    <i class="fas fa-industry"></i> Reactor Number <span class="required">*</span>
+                                </label>
+                                <select id="reactor_number" name="reactor_number" required>
+                                    <option value="" disabled selected>Select reactor...</option>
+                                    <option value="R101">R101</option>
+                                    <option value="R150">R150</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="catalyst_weight">
+                                    <i class="fas fa-weight"></i> Catalyst Weight (g) <span class="required">*</span>
+                                </label>
+                                <input type="number" id="catalyst_weight" name="catalyst_weight" step="0.001" required placeholder="e.g., 0.500">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="catalyst_volume">
+                                    <i class="fas fa-flask"></i> Catalyst Volume (mL) <span class="required">*</span>
+                                </label>
+                                <input type="number" id="catalyst_volume" name="catalyst_volume" step="0.01" required placeholder="e.g., 2.5">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="catalyst_state">
+                                    <i class="fas fa-cubes"></i> Catalyst Physical State <span class="required">*</span>
+                                </label>
+                                <select id="catalyst_state" name="catalyst_state" required>
+                                    <option value="" disabled selected>Select physical state...</option>
+                                    <option value="granules">Granules</option>
+                                    <option value="powder">Powder</option>
+                                    <option value="pellets">Pellets</option>
+                                    <option value="extrudates">Extrudates</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="diluent_type">
+                                    <i class="fas fa-mortar-pestle"></i> Diluent Type <span class="required">*</span>
+                                </label>
+                                <select id="diluent_type" name="diluent_type" required>
+                                    <option value="" disabled selected>Select diluent type...</option>
+                                    <option value="SiO2">SiO2</option>
+                                    <option value="SiC">SiC</option>
+                                    <option value="none">None (No diluent)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="catalyst_diluent_ratio">
+                                    <i class="fas fa-balance-scale"></i> Catalyst to Diluent Ratio (mL/mL) <span class="required">*</span>
+                                </label>
+                                <input type="text" id="catalyst_diluent_ratio" name="catalyst_diluent_ratio" required placeholder="e.g., 1:3">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="catalyst_bed_length">
+                                    <i class="fas fa-ruler-vertical"></i> Catalyst Bed Length (cm) <span class="required">*</span>
+                                </label>
+                                <input type="number" id="catalyst_bed_length" name="catalyst_bed_length" step="0.1" required placeholder="e.g., 10.5">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="tc_top">
+                                    <i class="fas fa-thermometer-three-quarters"></i> TC at Top of Bed <span class="required">*</span>
+                                </label>
+                                <input type="text" id="tc_top" name="tc_top" required placeholder="e.g., TC1">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="tc_bottom">
+                                    <i class="fas fa-thermometer-quarter"></i> TC at Bottom of Bed <span class="required">*</span>
+                                </label>
+                                <input type="text" id="tc_bottom" name="tc_bottom" required placeholder="e.g., TC2">
+                            </div>
+                            
+                            <div class="form-group full-width">
+                                <label for="catalyst_notes">
+                                    <i class="fas fa-sticky-note"></i> Notes
+                                </label>
+                                <textarea id="catalyst_notes" name="catalyst_notes" rows="3" placeholder="Additional notes about the catalyst, setup, or experimental conditions..."></textarea>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -148,13 +274,21 @@
                 <div class="instruction-step">
                     <div class="step-number">3</div>
                     <div class="step-content">
+                        <h4>Enter Catalyst Metadata</h4>
+                        <p>Fill in the required catalyst information to document your experiment.</p>
+                    </div>
+                </div>
+                
+                <div class="instruction-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
                         <h4>Add Optional Prefix</h4>
                         <p>For better organization, add a descriptive prefix to your report name.</p>
                     </div>
                 </div>
                 
                 <div class="instruction-step">
-                    <div class="step-number">4</div>
+                    <div class="step-number">5</div>
                     <div class="step-content">
                         <h4>Choose Data Fusion Method</h4>
                         <p>Select advanced interpolation for smoother GC data integration with LV data.</p>
@@ -162,7 +296,7 @@
                 </div>
                 
                 <div class="instruction-step">
-                    <div class="step-number">5</div>
+                    <div class="step-number">6</div>
                     <div class="step-content">
                         <h4>Process Files</h4>
                         <p>Click "Process Files" and wait for your data to be analyzed and merged.</p>
@@ -209,6 +343,82 @@ document.addEventListener('DOMContentLoaded', function() {
     const progressBar = document.getElementById('upload-progress-bar').querySelector('.progress-fill');
     const resultLinksContainer = document.getElementById('result-links-container');
     
+    // Handle processing mode selection
+    const modeNewReport = document.getElementById('mode_new_report');
+    const modeAddToExisting = document.getElementById('mode_add_to_existing');
+    const existingReportSelection = document.getElementById('existing-report-selection');
+    const existingReportSelect = document.getElementById('existing_report');
+    const catalystMetadataCard = document.querySelector('.catalyst-metadata-card');
+    
+    // Handle processing mode change
+    function updateProcessingMode() {
+        if (modeAddToExisting.checked) {
+            existingReportSelection.style.display = 'block';
+            existingReportSelect.disabled = false;
+            catalystMetadataCard.style.display = 'none';
+            
+            // When adding to existing report, remove required attribute from metadata fields
+            document.querySelectorAll('.catalyst-metadata-card input[required], .catalyst-metadata-card select[required]').forEach(field => {
+                field.removeAttribute('required');
+            });
+            
+            // Load existing reports if not already loaded
+            if (existingReportSelect.options.length <= 1) {
+                loadExistingReports();
+            }
+        } else {
+            existingReportSelection.style.display = 'none';
+            existingReportSelect.disabled = true;
+            catalystMetadataCard.style.display = 'block';
+            
+            // When creating new report, add required attribute back to metadata fields
+            const requiredFields = [
+                'experiment_number', 'catalyst_batch', 'reactor_number',
+                'catalyst_weight', 'catalyst_volume', 'catalyst_state', 
+                'diluent_type', 'catalyst_bed_length', 'tc_top', 'tc_bottom'
+            ];
+            
+            requiredFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.setAttribute('required', 'required');
+                }
+            });
+        }
+    }
+    
+    modeNewReport.addEventListener('change', updateProcessingMode);
+    modeAddToExisting.addEventListener('change', updateProcessingMode);
+    
+    // Initialize mode
+    updateProcessingMode();
+    
+    // Function to load existing reports
+    function loadExistingReports() {
+        existingReportSelect.innerHTML = '<option value="" disabled selected>Loading reports...</option>';
+        
+        fetch('/api/reports')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.reports && data.reports.length > 0) {
+                    existingReportSelect.innerHTML = '<option value="" disabled selected>Select a report...</option>';
+                    
+                    data.reports.forEach(report => {
+                        const option = document.createElement('option');
+                        option.value = report.name;
+                        option.textContent = report.name;
+                        existingReportSelect.appendChild(option);
+                    });
+                } else {
+                    existingReportSelect.innerHTML = '<option value="" disabled selected>No reports available</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading reports:', error);
+                existingReportSelect.innerHTML = '<option value="" disabled selected>Error loading reports</option>';
+            });
+    }
+    
     // Update file input feedback
     lvFileInput.addEventListener('change', function() {
         updateFileFeedback(this, lvFileFeedback);
@@ -252,7 +462,54 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }, 500);
         
-        const formData = new FormData(uploadForm);
+        // Create FormData object to send files
+        const formData = new FormData();
+        formData.append('lv_file', lvFileInput.files[0]);
+        formData.append('gc_file', gcFileInput.files[0]);
+        
+        // Add processing mode
+        formData.append('processing_mode', modeAddToExisting.checked ? 'add' : 'new');
+        
+        // Add specific fields based on mode
+        if (modeAddToExisting.checked) {
+            // Add existing report name
+            formData.append('existing_report', existingReportSelect.value);
+            
+            // Don't add metadata fields when adding to existing report
+        } else {
+            // Add all catalyst metadata fields
+            const metadataFields = [
+                'experiment_number', 'catalyst_batch', 'reactor_number', 'catalyst_weight', 
+                'catalyst_volume', 'catalyst_state', 'diluent_type', 
+                'catalyst_diluent_ratio', 'catalyst_bed_length', 
+                'tc_top', 'tc_bottom', 'catalyst_notes'
+            ];
+            
+            metadataFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    formData.append(fieldId, field.value.trim());
+                }
+            });
+        }
+        
+        // Add interpolation settings
+        const useInterpolation = document.getElementById('use_interpolation').checked;
+        formData.append('use_interpolation', useInterpolation.toString());
+        
+        if (useInterpolation) {
+            const interpolationKind = document.getElementById('interpolation_kind').value;
+            formData.append('interpolation_kind', interpolationKind);
+        }
+        
+        // Add uniform grid settings
+        const useUniformGrid = document.getElementById('use_uniform_grid').checked;
+        formData.append('use_uniform_grid', useUniformGrid.toString());
+        
+        if (useUniformGrid) {
+            const gridFreq = document.getElementById('grid_freq').value;
+            formData.append('grid_freq', gridFreq);
+        }
         
         fetch('/process', {
             method: 'POST',
@@ -264,45 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clearInterval(progressInterval);
             progressBar.style.width = '100%';
             
-            if (data.success) {
-                // Show success message
-                uploadStatusMessage.innerHTML = '<i class="fas fa-check-circle"></i> Processing complete!';
-                uploadStatusMessage.className = 'status-message success';
-                
-                // Add result links
-                resultLinksContainer.style.display = 'block';
-                
-                const gcVisualizationHtml = data.gc_plot_path ? 
-                    `<p>GC data visualization: <strong>Created</strong></p>` : 
-                    `<p>GC data visualization: <strong>Not available</strong></p>`;
-                
-                const resultsHtml = `
-                    <h4>Processing Results</h4>
-                    <p>Report created: <strong>${data.timestamp_prefix}</strong></p>
-                    <p>Stages detected: <strong>${data.num_stages}</strong></p>
-                    ${gcVisualizationHtml}
-                    ${data.use_interpolation ? `<p>Data fusion method: <strong>Interpolation (${data.interpolation_kind})</strong></p>` : ''}
-                    <div class="result-buttons">
-                        <a href="/visualize?report=${encodeURIComponent(data.timestamp_prefix)}" class="btn-primary">
-                            <i class="fas fa-eye"></i> View Results
-                        </a>
-                        <a href="/reports" class="btn-secondary">
-                            <i class="fas fa-folder-open"></i> Manage Reports
-                        </a>
-                    </div>
-                `;
-                
-                resultLinksContainer.innerHTML = resultsHtml;
-                
-                // Reset form if needed
-                // uploadForm.reset();
-                // lvFileFeedback.textContent = 'No file selected';
-                // gcFileFeedback.textContent = 'No file selected';
-            } else {
-                // Show error message
-                uploadStatusMessage.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error: ${data.message}`;
-                uploadStatusMessage.className = 'status-message error';
-            }
+            displayResults(data);
         })
         .catch(error => {
             // Complete the progress bar
@@ -341,6 +560,20 @@ document.addEventListener('DOMContentLoaded', function() {
         gridFreqSelect.disabled = !this.checked;
     });
     
+    // Handle diluent type change
+    document.getElementById('diluent_type').addEventListener('change', function() {
+        const ratioField = document.getElementById('catalyst_diluent_ratio');
+        if (this.value === 'none') {
+            ratioField.value = 'N/A';
+            ratioField.disabled = true;
+        } else {
+            if (ratioField.value === 'N/A') {
+                ratioField.value = '';
+            }
+            ratioField.disabled = false;
+        }
+    });
+    
     function updateFileFeedback(input, feedbackElement) {
         if (input.files && input.files[0]) {
             const fileName = input.files[0].name;
@@ -363,33 +596,76 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function validateForm() {
         let valid = true;
+        let errorMessage = '';
         
-        // Check if LV file is selected
+        // Reset validation messages
+        uploadStatusMessage.textContent = '';
+        uploadStatusCard.style.display = 'none';
+        
+        // Remove any previous error classes
+        document.querySelectorAll('.error').forEach(el => {
+            el.classList.remove('error');
+        });
+        
+        // Check file inputs
         if (!lvFileInput.files || lvFileInput.files.length === 0) {
-            showNotification('Please select an LV file.', 'warning');
             valid = false;
+            errorMessage += 'Please select a LabVIEW file.\n';
+            lvFileFeedback.textContent = 'Required';
+            lvFileFeedback.classList.add('error');
+        } else {
+            lvFileFeedback.textContent = lvFileInput.files[0].name;
+            lvFileFeedback.classList.remove('error');
         }
         
-        // Check if GC file is selected
         if (!gcFileInput.files || gcFileInput.files.length === 0) {
-            showNotification('Please select a GC file.', 'warning');
             valid = false;
+            errorMessage += 'Please select a GC file.\n';
+            gcFileFeedback.textContent = 'Required';
+            gcFileFeedback.classList.add('error');
+        } else {
+            gcFileFeedback.textContent = gcFileInput.files[0].name;
+            gcFileFeedback.classList.remove('error');
         }
         
-        // Check file extensions
-        if (valid) {
-            const lvFileName = lvFileInput.files[0].name;
-            const gcFileName = gcFileInput.files[0].name;
-            
-            if (!lvFileName.toLowerCase().endsWith('.txt')) {
-                showNotification('LV file must be a .txt file.', 'warning');
+        // Check processing mode specific validation
+        if (modeAddToExisting.checked) {
+            // Validate existing report selection
+            if (!existingReportSelect.value) {
                 valid = false;
+                errorMessage += 'Please select an existing report to add data to.\n';
+                existingReportSelect.classList.add('error');
+            } else {
+                existingReportSelect.classList.remove('error');
             }
             
-            if (!gcFileName.toLowerCase().endsWith('.txt')) {
-                showNotification('GC file must be a .txt file.', 'warning');
-                valid = false;
+            // Skip metadata validation when adding to existing report
+        } else {
+            // Validate catalyst metadata only when creating a new report
+            // Check required catalyst fields
+            const requiredFields = [
+                'experiment_number', 'catalyst_batch', 'reactor_number',
+                'catalyst_weight', 'catalyst_volume', 'catalyst_state', 
+                'diluent_type', 'catalyst_bed_length', 'tc_top', 'tc_bottom'
+            ];
+            
+            for (const fieldId of requiredFields) {
+                const field = document.getElementById(fieldId);
+                if (field && !field.value.trim()) {
+                    valid = false;
+                    errorMessage += `Please fill in the ${field.placeholder || field.name || fieldId}.\n`;
+                    field.classList.add('error');
+                } else if (field) {
+                    field.classList.remove('error');
+                }
             }
+        }
+        
+        if (!valid) {
+            uploadStatusCard.classList.remove('success');
+            uploadStatusCard.classList.add('error');
+            uploadStatusMessage.textContent = errorMessage;
+            uploadStatusCard.style.display = 'block';
         }
         
         return valid;
@@ -404,6 +680,51 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             notification.style.display = 'none';
         }, 5000);
+    }
+    
+    function displayResults(data) {
+        // Clear existing results
+        resultLinksContainer.innerHTML = '';
+        
+        // Update status
+        if (data.success) {
+            uploadStatusCard.classList.remove('error');
+            uploadStatusCard.classList.add('success');
+            
+            // Different message based on whether this was an update or new report
+            if (data.is_update) {
+                uploadStatusMessage.innerHTML = `<i class="fas fa-check-circle"></i> ${data.message}<br><br>New data has been successfully merged into the report: <strong>${data.timestamp_prefix}</strong>`;
+            } else {
+                uploadStatusMessage.innerHTML = `<i class="fas fa-check-circle"></i> ${data.message}<br><br>Report has been generated: <strong>${data.timestamp_prefix}</strong>`;
+            }
+            
+            // Add links to results
+            if (data.overall_plot_path) {
+                const overallLink = document.createElement('a');
+                overallLink.href = `/visualize?report=${encodeURIComponent(data.timestamp_prefix)}`;
+                overallLink.className = 'btn btn-primary';
+                overallLink.innerHTML = '<i class="fas fa-chart-line"></i> View Report';
+                resultLinksContainer.appendChild(overallLink);
+            }
+            
+            if (data.overall_csv_path) {
+                const csvLink = document.createElement('a');
+                csvLink.href = `/${data.overall_csv_path}`;
+                csvLink.className = 'btn btn-secondary';
+                csvLink.innerHTML = '<i class="fas fa-download"></i> Download CSV';
+                csvLink.download = true;
+                resultLinksContainer.appendChild(csvLink);
+            }
+            
+            resultLinksContainer.style.display = 'block';
+        } else {
+            uploadStatusCard.classList.remove('success');
+            uploadStatusCard.classList.add('error');
+            uploadStatusMessage.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${data.message}`;
+            resultLinksContainer.style.display = 'none';
+        }
+        
+        uploadStatusCard.style.display = 'block';
     }
 });
 </script>

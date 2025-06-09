@@ -308,6 +308,23 @@ function renderReportDetails(reportName, data) {
             </div>
         </div>
         
+        <!-- Catalyst Metadata Section -->
+        <div class="card catalyst-metadata-card">
+            <div class="card-header">
+                <h3><i class="fas fa-flask"></i> Catalyst Metadata</h3>
+                <button id="edit-metadata-btn" class="btn-secondary">
+                    <i class="fas fa-edit"></i> Edit Metadata
+                </button>
+            </div>
+            <div class="card-body" id="metadata-display">
+                <div class="loading-metadata">
+                    <div class="spinner"></div>
+                    <p>Loading catalyst metadata...</p>
+                </div>
+            </div>
+        </div>
+        <!-- End Catalyst Metadata Section -->
+        
         <div class="report-actions-panel">
             <button id="view-contents-btn" class="btn-secondary">
                 <i class="fas fa-folder-open"></i> View Contents
@@ -341,12 +358,12 @@ function renderReportDetails(reportName, data) {
                             <th>Stage</th>
                             <th>Points</th>
                             <th>Duration</th>
-                            <th>Avg. Temp (°C)</th>
+                            <th>Avg. T Heater UP (°C)</th>
                             <th>Avg. Pressure (bar)</th>
                             <th>Avg. H₂ Flow (ml/min)</th>
                             <th>Avg. N₂ Flow (ml/min)</th>
                             <th>Avg. NH₃ (%)</th>
-                            <th>Avg. Outlet (g/h)</th>
+                            <th>Avg. Outlet Flow (g/h)</th>
                         </tr>
                     </thead>
                     <tbody id="stages-stats-tbody">
@@ -365,6 +382,14 @@ function renderReportDetails(reportName, data) {
     // Add event listener for viewing contents
     document.getElementById('view-contents-btn').addEventListener('click', function() {
         showContentsModal();
+    });
+    
+    // Load catalyst metadata
+    loadCatalystMetadata(reportName);
+    
+    // Add event listener for editing metadata
+    document.getElementById('edit-metadata-btn').addEventListener('click', function() {
+        showMetadataEditForm(reportName);
     });
 }
 
@@ -411,7 +436,7 @@ function renderStagesDetailedStats(stagesData) {
     // Find max values for each metric to create relative visual indicators
     const maxValues = {
         data_points: Math.max(...stagesData.map(s => s.data_points || 0)),
-        avg_temp: Math.max(...stagesData.filter(s => s.avg_temp).map(s => s.avg_temp)),
+        avg_temp: Math.max(...stagesData.filter(s => s.avg_temp !== undefined && s.avg_temp !== null).map(s => s.avg_temp || 0)),
         avg_pressure: Math.max(...stagesData.filter(s => s.avg_pressure).map(s => s.avg_pressure)),
         avg_h2_flow: Math.max(...stagesData.filter(s => s.avg_h2_flow).map(s => s.avg_h2_flow)),
         avg_n2_flow: Math.max(...stagesData.filter(s => s.avg_n2_flow).map(s => s.avg_n2_flow)),
@@ -430,14 +455,19 @@ function renderStagesDetailedStats(stagesData) {
     stagesData.forEach(stage => {
         // Helper function to create visual indicator bar
         const createIndicator = (value, maxValue) => {
-            if (!value || !maxValue) return '';
+            if (value === undefined || value === null || isNaN(value) || maxValue === undefined || maxValue <= 0) {
+                return '';
+            }
             const percentage = Math.min(Math.round((value / maxValue) * 100), 100);
             return `<div class="value-indicator" style="width: ${percentage}%"></div>`;
         };
         
         // Format values with proper precision and handling N/A cases
         const formatValue = (value, suffix, precision = 1) => {
-            return value ? value.toFixed(precision) + suffix : 'N/A';
+            if (value === undefined || value === null || isNaN(value)) {
+                return 'N/A';
+            }
+            return value.toFixed(precision) + suffix;
         };
         
         html += `
@@ -547,8 +577,10 @@ function renderStagesChart() {
     const labels = stagesData.map(stage => `Stage ${stage.number}`);
     const datasets = [
         {
-            label: 'Avg. Temperature (°C)',
-            data: stagesData.map(stage => stage.avg_temp || 0),
+            label: 'Avg. T Heater UP (°C)',
+            data: stagesData.map(stage => {
+                return stage.avg_temp !== undefined && stage.avg_temp !== null ? stage.avg_temp : null;
+            }),
             backgroundColor: 'rgba(255, 99, 132, 0.5)',
             borderColor: 'rgb(255, 99, 132)',
             yAxisID: 'y-temperature',
@@ -582,7 +614,7 @@ function renderStagesChart() {
             yAxisID: 'y-concentration',
         },
         {
-            label: 'Avg. Outlet (g/h)',
+            label: 'Avg. Outlet Flow (g/h)',
             data: stagesData.map(stage => stage.avg_outlet || 0),
             backgroundColor: 'rgba(255, 159, 64, 0.5)',
             borderColor: 'rgb(255, 159, 64)',
@@ -901,6 +933,345 @@ function showNotification(message, type = 'info') {
     setTimeout(() => {
         notification.style.display = 'none';
     }, 5000);
+}
+
+function loadCatalystMetadata(reportName) {
+    if (!reportName) return;
+    
+    const metadataDisplay = document.getElementById('metadata-display');
+    
+    fetch(`/api/report-metadata/${encodeURIComponent(reportName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderMetadataDisplay(data.metadata, metadataDisplay, data.file_exists !== false);
+            } else {
+                metadataDisplay.innerHTML = `
+                    <div class="error-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error loading metadata: ${data.message}</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching metadata:', error);
+            metadataDisplay.innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Failed to load metadata. Please try again.</p>
+                </div>
+            `;
+        });
+}
+
+function renderMetadataDisplay(metadata, container, fileExists = true) {
+    // Check if metadata is essentially empty
+    const hasData = Object.values(metadata).some(val => val && val !== '' && val !== 'N/A');
+    
+    if (!hasData) {
+        container.innerHTML = `
+            <div class="no-metadata">
+                <i class="fas fa-info-circle"></i>
+                <p>No catalyst metadata available for this report.</p>
+                <p>Click "Edit Metadata" to add information.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Format metadata for display
+    const createMetadataItem = (label, value) => {
+        if (!value || value === '') value = 'N/A';
+        return `
+            <div class="metadata-item">
+                <h4>${label}</h4>
+                <p>${value}</p>
+            </div>
+        `;
+    };
+    
+    let html = '<div class="metadata-grid-display">';
+    
+    // Add all metadata items
+    html += createMetadataItem('Experiment Number', metadata.experiment_number);
+    html += createMetadataItem('Catalyst Batch', metadata.catalyst_batch);
+    html += createMetadataItem('Reactor Number', metadata.reactor_number);
+    html += createMetadataItem('Catalyst Weight', `${metadata.catalyst_weight} g`);
+    html += createMetadataItem('Catalyst Volume', `${metadata.catalyst_volume} mL`);
+    html += createMetadataItem('Physical State', metadata.catalyst_state ? metadata.catalyst_state.charAt(0).toUpperCase() + metadata.catalyst_state.slice(1) : 'N/A');
+    html += createMetadataItem('Diluent Type', metadata.diluent_type === 'none' ? 'None' : metadata.diluent_type);
+    html += createMetadataItem('Catalyst/Diluent Ratio', metadata.catalyst_diluent_ratio);
+    html += createMetadataItem('Bed Length', `${metadata.catalyst_bed_length} cm`);
+    html += createMetadataItem('TC at Top', metadata.tc_top);
+    html += createMetadataItem('TC at Bottom', metadata.tc_bottom);
+    
+    if (metadata.updated_at) {
+        html += createMetadataItem('Last Updated', metadata.updated_at);
+    }
+    
+    // Add notes if available
+    if (metadata.catalyst_notes && metadata.catalyst_notes.trim() !== '') {
+        html += `
+            <div class="metadata-notes">
+                <h4>Notes</h4>
+                <p>${metadata.catalyst_notes}</p>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function showMetadataEditForm(reportName) {
+    if (!reportName) return;
+    
+    const metadataDisplay = document.getElementById('metadata-display');
+    metadataDisplay.innerHTML = `
+        <div class="loading-metadata">
+            <div class="spinner"></div>
+            <p>Loading metadata form...</p>
+        </div>
+    `;
+    
+    // Fetch current metadata to pre-populate the form
+    fetch(`/api/report-metadata/${encodeURIComponent(reportName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderMetadataEditForm(reportName, data.metadata, metadataDisplay);
+            } else {
+                metadataDisplay.innerHTML = `
+                    <div class="error-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error loading metadata: ${data.message}</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching metadata for edit form:', error);
+            metadataDisplay.innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Failed to load metadata form. Please try again.</p>
+                </div>
+            `;
+        });
+}
+
+function renderMetadataEditForm(reportName, metadata, container) {
+    const html = `
+        <form id="metadata-edit-form" class="metadata-form">
+            <div class="form-group">
+                <label for="edit_experiment_number">
+                    <i class="fas fa-hashtag"></i> Experiment Number
+                </label>
+                <input type="text" id="edit_experiment_number" name="experiment_number" value="${metadata.experiment_number || ''}" placeholder="e.g., Exp01">
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_catalyst_batch">
+                    <i class="fas fa-box"></i> Catalyst Batch
+                </label>
+                <input type="text" id="edit_catalyst_batch" name="catalyst_batch" value="${metadata.catalyst_batch || ''}" placeholder="e.g., Batch123">
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_reactor_number">
+                    <i class="fas fa-industry"></i> Reactor Number
+                </label>
+                <select id="edit_reactor_number" name="reactor_number">
+                    <option value="R101" ${metadata.reactor_number === 'R101' ? 'selected' : ''}>R101</option>
+                    <option value="R150" ${metadata.reactor_number === 'R150' ? 'selected' : ''}>R150</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_catalyst_weight">
+                    <i class="fas fa-weight"></i> Catalyst Weight (g)
+                </label>
+                <input type="number" id="edit_catalyst_weight" name="catalyst_weight" value="${metadata.catalyst_weight || ''}" step="0.001" placeholder="e.g., 0.500">
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_catalyst_volume">
+                    <i class="fas fa-flask"></i> Catalyst Volume (mL)
+                </label>
+                <input type="number" id="edit_catalyst_volume" name="catalyst_volume" value="${metadata.catalyst_volume || ''}" step="0.01" placeholder="e.g., 2.5">
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_catalyst_state">
+                    <i class="fas fa-cubes"></i> Catalyst Physical State
+                </label>
+                <select id="edit_catalyst_state" name="catalyst_state">
+                    <option value="" ${!metadata.catalyst_state ? 'selected' : ''}>Select physical state...</option>
+                    <option value="granules" ${metadata.catalyst_state === 'granules' ? 'selected' : ''}>Granules</option>
+                    <option value="powder" ${metadata.catalyst_state === 'powder' ? 'selected' : ''}>Powder</option>
+                    <option value="pellets" ${metadata.catalyst_state === 'pellets' ? 'selected' : ''}>Pellets</option>
+                    <option value="extrudates" ${metadata.catalyst_state === 'extrudates' ? 'selected' : ''}>Extrudates</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_diluent_type">
+                    <i class="fas fa-mortar-pestle"></i> Diluent Type
+                </label>
+                <select id="edit_diluent_type" name="diluent_type">
+                    <option value="" ${!metadata.diluent_type ? 'selected' : ''}>Select diluent type...</option>
+                    <option value="SiO2" ${metadata.diluent_type === 'SiO2' ? 'selected' : ''}>SiO2</option>
+                    <option value="SiC" ${metadata.diluent_type === 'SiC' ? 'selected' : ''}>SiC</option>
+                    <option value="none" ${metadata.diluent_type === 'none' ? 'selected' : ''}>None (No diluent)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_catalyst_diluent_ratio">
+                    <i class="fas fa-balance-scale"></i> Catalyst to Diluent Ratio (mL/mL)
+                </label>
+                <input type="text" id="edit_catalyst_diluent_ratio" name="catalyst_diluent_ratio" 
+                       value="${metadata.catalyst_diluent_ratio || ''}" placeholder="e.g., 1:3"
+                       ${metadata.diluent_type === 'none' ? 'disabled' : ''}>
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_catalyst_bed_length">
+                    <i class="fas fa-ruler-vertical"></i> Catalyst Bed Length (cm)
+                </label>
+                <input type="number" id="edit_catalyst_bed_length" name="catalyst_bed_length" 
+                       value="${metadata.catalyst_bed_length || ''}" step="0.1" placeholder="e.g., 10.5">
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_tc_top">
+                    <i class="fas fa-thermometer-three-quarters"></i> TC at Top of Bed
+                </label>
+                <input type="text" id="edit_tc_top" name="tc_top" value="${metadata.tc_top || ''}" placeholder="e.g., TC1">
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_tc_bottom">
+                    <i class="fas fa-thermometer-quarter"></i> TC at Bottom of Bed
+                </label>
+                <input type="text" id="edit_tc_bottom" name="tc_bottom" value="${metadata.tc_bottom || ''}" placeholder="e.g., TC2">
+            </div>
+            
+            <div class="form-group full-width">
+                <label for="edit_catalyst_notes">
+                    <i class="fas fa-sticky-note"></i> Notes
+                </label>
+                <textarea id="edit_catalyst_notes" name="catalyst_notes" rows="3" 
+                          placeholder="Additional notes about the catalyst, setup, or experimental conditions...">${metadata.catalyst_notes || ''}</textarea>
+            </div>
+            
+            <div class="metadata-form-actions">
+                <button type="button" id="cancel-metadata-edit" class="btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </form>
+    `;
+    
+    container.innerHTML = html;
+    
+    // Add event listeners for the form
+    document.getElementById('metadata-edit-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveMetadataChanges(reportName);
+    });
+    
+    document.getElementById('cancel-metadata-edit').addEventListener('click', function() {
+        loadCatalystMetadata(reportName);
+    });
+    
+    // Handle diluent type change
+    document.getElementById('edit_diluent_type').addEventListener('change', function() {
+        const ratioField = document.getElementById('edit_catalyst_diluent_ratio');
+        if (this.value === 'none') {
+            ratioField.value = 'N/A';
+            ratioField.disabled = true;
+        } else {
+            if (ratioField.value === 'N/A') {
+                ratioField.value = '';
+            }
+            ratioField.disabled = false;
+        }
+    });
+}
+
+function saveMetadataChanges(reportName) {
+    if (!reportName) return;
+    
+    const form = document.getElementById('metadata-edit-form');
+    const formData = new FormData(form);
+    
+    // Convert FormData to a regular object
+    const metadata = {};
+    formData.forEach((value, key) => {
+        metadata[key] = value;
+    });
+    
+    // Show loading state
+    const metadataDisplay = document.getElementById('metadata-display');
+    metadataDisplay.innerHTML = `
+        <div class="loading-metadata">
+            <div class="spinner"></div>
+            <p>Saving metadata changes...</p>
+        </div>
+    `;
+    
+    // Send the update request
+    fetch(`/api/update-report-metadata/${encodeURIComponent(reportName)}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(metadata)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Catalyst metadata updated successfully', 'success');
+            renderMetadataDisplay(data.metadata, metadataDisplay, true);
+        } else {
+            showNotification('Error saving metadata: ' + data.message, 'error');
+            metadataDisplay.innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Error saving metadata: ${data.message}</p>
+                    <button id="retry-metadata-edit" class="btn-secondary">
+                        <i class="fas fa-redo"></i> Try Again
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('retry-metadata-edit').addEventListener('click', function() {
+                showMetadataEditForm(reportName);
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error saving metadata:', error);
+        showNotification('Failed to save metadata. Please try again.', 'error');
+        metadataDisplay.innerHTML = `
+            <div class="error-state">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Failed to save metadata. Please try again.</p>
+                <button id="retry-metadata-edit" class="btn-secondary">
+                    <i class="fas fa-redo"></i> Try Again
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('retry-metadata-edit').addEventListener('click', function() {
+            showMetadataEditForm(reportName);
+        });
+    });
 }
 </script>
 {% endblock %} 

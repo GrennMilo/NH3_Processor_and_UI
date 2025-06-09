@@ -540,12 +540,62 @@ button[type="submit"] {
 .upload-actions {
     display: flex;
     gap: var(--spacing-md);
+    justify-content: flex-start;
+    margin-top: var(--spacing-lg);
 }
 
+/* Catalyst Metadata Styles */
+.catalyst-metadata-card {
+    margin-top: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.catalyst-metadata-card .card-header {
+    display: flex;
+    align-items: center;
+}
+
+.catalyst-metadata-card .card-header h4 {
+    margin-bottom: 0;
+}
+
+.catalyst-metadata-card .card-header i {
+    margin-right: var(--spacing-sm);
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+}
+
+.metadata-grid .form-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.metadata-grid .full-width {
+    grid-column: 1 / -1;
+}
+
+.metadata-grid input:disabled,
+.metadata-grid select:disabled,
+.metadata-grid textarea:disabled {
+    background-color: var(--bg-tertiary);
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+    .metadata-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Instructions Container Styles */
 .instructions-container {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-lg);
+    gap: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
 }
 
@@ -675,22 +725,127 @@ button[type="submit"] {
 
 .report-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
 }
 
 .summary-card {
     background-color: var(--bg-tertiary);
-    border-radius: var(--border-radius-sm);
+    border-radius: var(--border-radius-md);
     padding: var(--spacing-md);
-    text-align: center;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
 }
 
 .summary-icon {
-    font-size: 2rem;
+    background-color: var(--bg-secondary);
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
     color: var(--accent-primary);
-    margin-bottom: var(--spacing-sm);
+}
+
+/* Catalyst Metadata Card Styles in Reports */
+.catalyst-metadata-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.catalyst-metadata-card .card-header h3 {
+    margin-bottom: 0;
+}
+
+.metadata-grid-display {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+}
+
+.metadata-item {
+    margin-bottom: var(--spacing-md);
+}
+
+.metadata-item h4 {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.metadata-item p {
+    font-size: var(--font-size-md);
+    margin-bottom: 0;
+}
+
+.metadata-notes {
+    grid-column: 1 / -1;
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--border-color);
+}
+
+.metadata-notes h4 {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.metadata-notes p {
+    white-space: pre-line;
+    margin-bottom: 0;
+}
+
+.loading-metadata {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+    gap: var(--spacing-md);
+}
+
+.metadata-form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+}
+
+.metadata-form .form-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.metadata-form .form-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.metadata-form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-md);
+}
+
+.no-metadata {
+    text-align: center;
+    padding: var(--spacing-xl);
+    color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .metadata-grid-display {
+        grid-template-columns: 1fr;
+    }
+    
+    .metadata-form {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Visualization Page Styles */
@@ -885,4 +1040,244 @@ button[type="submit"] {
     list-style: none;
     padding-left: var(--spacing-lg);
     margin-top: var(--spacing-sm);
+}
+
+/* Tables for reports and files */
+.reports-table-container,
+.files-table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+    margin-bottom: 30px;
+    background: var(--bg-card);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.reports-table,
+.files-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.reports-table th,
+.reports-table td,
+.files-table th,
+.files-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.reports-table th,
+.files-table th {
+    background-color: var(--bg-dark-tertiary);
+    font-weight: 600;
+    color: var(--text-bright);
+    position: sticky;
+    top: 0;
+}
+
+.reports-table tr:hover,
+.files-table tr:hover {
+    background-color: var(--bg-hover);
+}
+
+.reports-table tr:nth-child(even),
+.files-table tr:nth-child(even) {
+    background-color: var(--bg-dark-secondary);
+}
+
+.actions-cell {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-start;
+}
+
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: var(--bg-button);
+    color: var(--text-bright);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+    background-color: var(--primary-color);
+    transform: scale(1.05);
+}
+
+.loading-text, 
+.empty-text {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.file-icon {
+    margin-right: 8px;
+    color: var(--text-muted);
+}
+
+/* Modal for report details */
+.modal {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    background: var(--bg-card);
+    border-radius: 8px;
+    padding: 20px;
+    width: 90%;
+    max-width: 1000px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    transform: translateY(20px);
+    transition: transform 0.3s ease;
+}
+
+.modal.show .modal-content {
+    transform: translateY(0);
+}
+
+.close-modal {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.2s ease;
+}
+
+.close-modal:hover {
+    color: var(--text-bright);
+}
+
+.report-details {
+    margin-top: 20px;
+}
+
+.report-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+    padding: 15px;
+    background: var(--bg-dark-secondary);
+    border-radius: 8px;
+}
+
+.report-meta p {
+    margin: 0;
+}
+
+.stages-detailed-view {
+    margin-top: 25px;
+}
+
+/* Enhanced dashboard stats */
+.stats-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin: 10px 0 0;
+}
+
+.error-message {
+    background-color: rgba(255, 59, 48, 0.1);
+    border: 1px solid rgba(255, 59, 48, 0.3);
+    border-radius: 4px;
+    padding: 12px;
+    margin: 10px 0;
+    color: #ff3b30;
+}
+
+.error-message p {
+    margin: 0;
+    font-weight: 500;
+}
+
+/* Upload Form Specific Styles */
+.option-container {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 15px;
+}
+
+.radio-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.radio-container:hover {
+    background-color: var(--hover-bg-color);
+}
+
+.radio-container input[type="radio"] {
+    margin: 0;
+}
+
+.radio-container input[type="radio"]:checked + label {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+#existing-report-selection {
+    background-color: var(--card-bg-color);
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
 } 

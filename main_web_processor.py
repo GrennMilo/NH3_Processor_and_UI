@@ -51,7 +51,7 @@ dark_theme_layout_updates = dict(
         font_family="Inter",
         font_color="#e1e3e8"
     ),
-    margin=dict(l=60, r=40, t=50, b=40)
+    margin=dict(l=80, r=60, t=50, b=40)  # Reduced right margin to allow wider plot area
 )
 
 # Configuration
@@ -290,19 +290,15 @@ def process_gc_file(filename):
         with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
             first_lines = [next(f) for _ in range(4) if f]
         
-        # Check for CAS-2025-Q1 format
-        if first_lines and first_lines[0].strip().startswith("CAS-2025-Q1"):
-            print("Detected CAS-2025-Q1 format - using specialized parser")
-            return process_cas_gc_file(filename)
-        else:
-            print("Using enhanced GC file parser with column detection")
-            return parse_gc_file(filename)
+        # Use the enhanced GC file parser with column detection
+        print("Using enhanced GC file parser with column detection")
+        return parse_gc_file(filename)
         
     except Exception as e:
         print(f"Error processing GC file '{filename}': {e}")
         import traceback
         traceback.print_exc()
-        return pd.DataFrame()
+        return pd.DataFrame()  # Return empty DataFrame instead of None
 
 def parse_gc_file(gc_file_path):
     """
@@ -962,18 +958,48 @@ def create_dynamic_plot(merged_df, plot_title, is_stage_plot=False, stage_number
         'hovermode': 'x unified',
         'xaxis': dict(
             title=x_axis_title,
-            domain=[0.1, 0.9]
+            domain=[0.10, 0.92]  # Wider domain to use more space
         )
     }
     
     # Configure y-axes with dedicated concentration axis
     y_axis_positions = {
-        'y1': {'side': 'left', 'position': 0.0, 'title': 'Temperature/General'},
-        'y2': {'side': 'right', 'position': 1.0, 'title': 'Pressure'}, 
-        'y3': {'side': 'left', 'position': 0.05, 'title': 'Flows'},
-        'y4': {'side': 'right', 'position': 0.95, 'title': 'GC Concentrations'},
-        'y5': {'side': 'left', 'position': 0.01, 'title': 'Other'},
+        'y1': {'side': 'left', 'position': 0.08, 'title': 'Temperature/General'},
+        'y2': {'side': 'right', 'position': 0.94, 'title': 'Pressure'}, 
+        'y3': {'side': 'left', 'position': 0.01, 'title': 'Flows'},
+        'y4': {'side': 'right', 'position': 0.99, 'title': 'GC Concentrations (%)'},
+        'y5': {'side': 'left', 'position': 0.04, 'title': 'Other'}
     }
+    
+    # Track min/max for each axis to set appropriate ranges
+    axis_data_ranges = {}
+    
+    # First pass to collect data ranges for each axis
+    for col in numeric_cols:
+        if col in merged_df.columns:
+            # Categorize the column
+            col_lower = col.lower()
+            assigned_category = 'other'
+            
+            # Determine category
+            for category, info in parameter_categories.items():
+                if any(keyword in col_lower for keyword in info['keywords']):
+                    assigned_category = category
+                    break
+            
+            yaxis = parameter_categories[assigned_category]['yaxis']
+            
+            # Get data range for this column
+            non_nan_values = merged_df[col].dropna()
+            if not non_nan_values.empty:
+                col_min = non_nan_values.min()
+                col_max = non_nan_values.max()
+                
+                if yaxis not in axis_data_ranges:
+                    axis_data_ranges[yaxis] = {'min': col_min, 'max': col_max}
+                else:
+                    axis_data_ranges[yaxis]['min'] = min(axis_data_ranges[yaxis]['min'], col_min)
+                    axis_data_ranges[yaxis]['max'] = max(axis_data_ranges[yaxis]['max'], col_max)
     
     for yaxis, titles in y_axis_titles.items():
         # Prepare axis title based on what types of data are on this axis
@@ -985,9 +1011,26 @@ def create_dynamic_plot(merged_df, plot_title, is_stage_plot=False, stage_number
                 axis_title = f"{', '.join(titles[:2])}... ({len(titles)} params)"
         
         axis_config = {
-            'title': dict(text=axis_title),
+            'title': dict(text=axis_title, standoff=15),  # Increased standoff for better spacing
             'showgrid': False
         }
+        
+        # Set appropriate range with padding for y-axis
+        if yaxis in axis_data_ranges:
+            data_min = axis_data_ranges[yaxis]['min']
+            data_max = axis_data_ranges[yaxis]['max']
+            
+            # Calculate padding (5% of range, or minimum value if range is very small)
+            range_size = data_max - data_min
+            padding = max(range_size * 0.05, 0.1)
+            
+            # Special handling for concentration axis (y4) to start from zero with fixed scale
+            if yaxis == 'y4':
+                axis_config['range'] = [0, 100]  # Fixed range from 0-100% for concentrations
+                axis_config['dtick'] = 20  # Major ticks every 20%
+                axis_config['tick0'] = 0  # Start ticks at 0
+            else:
+                axis_config['range'] = [data_min - padding, data_max + padding]
         
         if yaxis != 'y1':
             axis_config.update({
@@ -1169,6 +1212,8 @@ def generate_comparison_plot(stage_data_json_paths, report_folder_abs, compariso
 
     # Collect all stages data
     all_stages_data = []
+    source_names = []  # Initialize source_names list to track stage numbers for the title
+    
     for i, json_path in enumerate(stage_data_json_paths):
         try:
             print(f"Processing comparison data from: {json_path}")
@@ -1181,6 +1226,7 @@ def generate_comparison_plot(stage_data_json_paths, report_folder_abs, compariso
                 for part in reversed(path_parts):
                     if part.startswith("step_"):
                         stage_num = part.split('_')[1]
+                        source_names.append(f"Stage {stage_num}")  # Add to source_names
                         break
             except Exception as e_parse:
                 print(f"Could not parse stage number from path {json_path}: {e_parse}")
@@ -1238,6 +1284,38 @@ def generate_comparison_plot(stage_data_json_paths, report_folder_abs, compariso
     y_axis_titles = {}
     stages = sorted(combined_df['StageNumber'].unique())
     traces_added = 0
+    
+    # Track min/max for each axis to set appropriate ranges
+    axis_data_ranges = {}
+    
+    # First pass to collect data ranges for each axis
+    for col in numeric_cols:
+        col_lower = col.lower()
+        assigned_yaxis = 'y1'  # default
+        
+        # Special priority for NH3
+        if any(keyword in col_lower for keyword in parameter_categories['nh3_concentration']['keywords']):
+            assigned_yaxis = 'y4'
+        else:
+            for category, info in parameter_categories.items():
+                if category != 'nh3_concentration' and any(keyword in col_lower for keyword in info['keywords']):
+                    assigned_yaxis = info['yaxis']
+                    break
+        
+        # Collect data ranges for each stage
+        for stage in stages:
+            stage_data = combined_df[combined_df['StageNumber'] == stage]
+            if not stage_data.empty and col in stage_data.columns:
+                non_nan_values = stage_data[col].dropna()
+                if not non_nan_values.empty:
+                    col_min = non_nan_values.min()
+                    col_max = non_nan_values.max()
+                    
+                    if assigned_yaxis not in axis_data_ranges:
+                        axis_data_ranges[assigned_yaxis] = {'min': col_min, 'max': col_max}
+                    else:
+                        axis_data_ranges[assigned_yaxis]['min'] = min(axis_data_ranges[assigned_yaxis]['min'], col_min)
+                        axis_data_ranges[assigned_yaxis]['max'] = max(axis_data_ranges[assigned_yaxis]['max'], col_max)
     
     # Create traces for each column and stage combination
     for col in numeric_cols:
@@ -1301,23 +1379,39 @@ def generate_comparison_plot(stage_data_json_paths, report_folder_abs, compariso
         'height': 750,
         'hovermode': 'x unified',
         'xaxis_title': 'Relative Time (s)',
-        'xaxis': dict(domain=[0.1, 0.9], showgrid=False)
+        'xaxis': dict(domain=[0.10, 0.92], showgrid=False)  # Wider domain to use more space
     }
     
     # Configure y-axes
     y_axis_positions = {
-        'y1': {'side': 'left', 'position': 0.0, 'title': 'Temperature/General'},
-        'y2': {'side': 'right', 'position': 1.0, 'title': 'Pressure'}, 
-        'y3': {'side': 'left', 'position': 0.05, 'title': 'Flows'},
-        'y4': {'side': 'right', 'position': 0.95, 'title': 'Concentrations'}
+        'y1': {'side': 'left', 'position': 0.08, 'title': 'Temperature/General'},
+        'y2': {'side': 'right', 'position': 0.94, 'title': 'Pressure'}, 
+        'y3': {'side': 'left', 'position': 0.01, 'title': 'Flows'},
+        'y4': {'side': 'right', 'position': 0.99, 'title': 'GC Concentrations (%)'},
+        'y5': {'side': 'left', 'position': 0.04, 'title': 'Other'}
     }
     
     for yaxis, info in y_axis_positions.items():
         axis_key = yaxis.replace('y', 'yaxis') if yaxis != 'y1' else 'yaxis'
         axis_config = {
-            'title': dict(text=info['title']),
+            'title': dict(text=info['title'], standoff=15),  # Increased standoff for better spacing
             'showgrid': False
         }
+        
+        # Set appropriate range with padding for y-axis
+        if yaxis in axis_data_ranges:
+            data_min = axis_data_ranges[yaxis]['min']
+            data_max = axis_data_ranges[yaxis]['max']
+            
+            # Calculate padding (5% of range, or minimum value if range is very small)
+            range_size = data_max - data_min
+            padding = max(range_size * 0.05, 0.1)
+            
+            # Special handling for concentration axis (y4) to start from zero
+            if yaxis == 'y4':
+                axis_config['range'] = [0, data_max * 1.1]  # Start from 0, add 10% padding at top
+            else:
+                axis_config['range'] = [data_min - padding, data_max + padding]
         
         if yaxis != 'y1':
             axis_config.update({
@@ -1331,6 +1425,10 @@ def generate_comparison_plot(stage_data_json_paths, report_folder_abs, compariso
     
     # Apply dark theme
     layout_config.update(dark_theme_layout_updates)
+    
+    # Add source information to layout title
+    source_text = ", ".join(source_names)
+    layout_config['title_text'] += f" (Sources: {source_text})"
     
     fig.update_layout(**layout_config)
 
@@ -1375,6 +1473,12 @@ def create_cross_comparison_plot(selected_comparison_json_file_paths, current_re
     # Track sources for legend
     source_names = []
     
+    # Track data ranges for each axis
+    axis_data_ranges = {'y1': {'min': float('inf'), 'max': float('-inf')},
+                      'y2': {'min': float('inf'), 'max': float('-inf')},
+                      'y3': {'min': float('inf'), 'max': float('-inf')},
+                      'y4': {'min': float('inf'), 'max': float('-inf')}}
+    
     # Processing function for selected stages from current report
     if current_report_timestamp and current_report_selected_stages:
         current_report_path = os.path.join(base_reports_folder_abs, current_report_timestamp)
@@ -1406,6 +1510,26 @@ def create_cross_comparison_plot(selected_comparison_json_file_paths, current_re
                             'other': {'keywords': [], 'yaxis': 'y1'}
                         }
                         
+                        # First pass to collect data ranges
+                        for col in numeric_cols:
+                            col_lower = col.lower()
+                            yaxis = 'y1'  # default
+                            
+                            for category, info in parameter_categories.items():
+                                if any(keyword in col_lower for keyword in info['keywords']):
+                                    yaxis = info['yaxis']
+                                    break
+                            
+                            # Get data range for this column
+                            non_nan_values = stage_df[col].dropna()
+                            if not non_nan_values.empty:
+                                col_min = non_nan_values.min()
+                                col_max = non_nan_values.max()
+                                
+                                axis_data_ranges[yaxis]['min'] = min(axis_data_ranges[yaxis]['min'], col_min)
+                                axis_data_ranges[yaxis]['max'] = max(axis_data_ranges[yaxis]['max'], col_max)
+                        
+                        # Now add traces
                         for col in numeric_cols:
                             # Determine y-axis for this column
                             col_lower = col.lower()
@@ -1464,6 +1588,23 @@ def create_cross_comparison_plot(selected_comparison_json_file_paths, current_re
             
             # Extract data from the plotly figure
             if 'data' in json_content:
+                # First pass to collect data ranges
+                for trace in json_content['data']:
+                    if 'yaxis' in trace and 'y' in trace:
+                        yaxis = trace['yaxis']
+                        y_data = trace['y']
+                        
+                        if y_data and isinstance(y_data, list):
+                            non_nan_values = [v for v in y_data if v is not None and not pd.isna(v)]
+                            if non_nan_values:
+                                col_min = min(non_nan_values)
+                                col_max = max(non_nan_values)
+                                
+                                if yaxis in axis_data_ranges:
+                                    axis_data_ranges[yaxis]['min'] = min(axis_data_ranges[yaxis]['min'], col_min)
+                                    axis_data_ranges[yaxis]['max'] = max(axis_data_ranges[yaxis]['max'], col_max)
+                
+                # Add traces
                 for trace in json_content['data']:
                     # Get original trace properties
                     trace_name = trace.get('name', '')
@@ -1508,26 +1649,46 @@ def create_cross_comparison_plot(selected_comparison_json_file_paths, current_re
     # Configure layout
     layout_config = {
         'title_text': 'Cross-Report Comparison',
-        'height': 750,
+        'height': 800,  # Increased from 750 to 800
         'hovermode': 'x unified',
         'xaxis_title': 'Relative Time (s)',
-        'xaxis': dict(domain=[0.1, 0.9], showgrid=False)
+        'xaxis': dict(domain=[0.10, 0.92], showgrid=False)  # Wider domain to use more space
     }
     
     # Configure y-axes
     y_axis_positions = {
-        'y1': {'side': 'left', 'position': 0.0, 'title': 'Temperature/General'},
-        'y2': {'side': 'right', 'position': 1.0, 'title': 'Pressure'}, 
-        'y3': {'side': 'left', 'position': 0.05, 'title': 'Flows'},
-        'y4': {'side': 'right', 'position': 0.95, 'title': 'Concentrations'}
+        'y1': {'side': 'left', 'position': 0.08, 'title': 'Temperature/General'},
+        'y2': {'side': 'right', 'position': 0.94, 'title': 'Pressure'}, 
+        'y3': {'side': 'left', 'position': 0.01, 'title': 'Flows'},
+        'y4': {'side': 'right', 'position': 0.99, 'title': 'GC Concentrations (%)'},
+        'y5': {'side': 'left', 'position': 0.04, 'title': 'Other'}
     }
     
     for yaxis, info in y_axis_positions.items():
         axis_key = yaxis.replace('y', 'yaxis') if yaxis != 'y1' else 'yaxis'
         axis_config = {
-            'title': dict(text=info['title']),
+            'title': dict(text=info['title'], standoff=15),  # Increased standoff for better spacing
             'showgrid': False
         }
+        
+        # Set appropriate range with padding for y-axis
+        if yaxis in axis_data_ranges:
+            data_min = axis_data_ranges[yaxis]['min']
+            data_max = axis_data_ranges[yaxis]['max']
+            
+            # Only use ranges if we actually collected data
+            if data_min != float('inf') and data_max != float('-inf'):
+                # Calculate padding (5% of range, or minimum value if range is very small)
+                range_size = data_max - data_min
+                padding = max(range_size * 0.05, 0.1)
+                
+                # Special handling for concentration axis (y4) to start from zero
+                if yaxis == 'y4':
+                    axis_config['range'] = [0, 100]  # Fixed range from 0-100% for concentrations
+                    axis_config['dtick'] = 20  # Major ticks every 20%
+                    axis_config['tick0'] = 0  # Start ticks at 0
+                else:
+                    axis_config['range'] = [data_min - padding, data_max + padding]
         
         if yaxis != 'y1':
             axis_config.update({
@@ -1557,26 +1718,46 @@ def create_cross_comparison_plot(selected_comparison_json_file_paths, current_re
         return None
 
 def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_prefix_text=None, 
-                    use_interpolation=False, interpolation_kind='cubic', use_uniform_grid=True, grid_freq='1min'):
+                    use_interpolation=False, interpolation_kind='cubic', use_uniform_grid=True, grid_freq='1min',
+                    existing_report_path=None):
     """
     Enhanced reports generation with comprehensive error handling and improved processing.
     Now integrates GC data processing from gc_integration.py.
-    """
-    current_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if report_prefix_text and report_prefix_text.strip():
-        safe_prefix = report_prefix_text.strip()
-        safe_prefix = safe_prefix.replace(" ", "_")
-        problematic_chars = ['/', '\\\\', '#', '?', '&', '%', ':', '*', '"', '<', '>', '|', '(', ')', '[', ']', '{', '}']
-        for char in problematic_chars:
-            safe_prefix = safe_prefix.replace(char, '_')
-        safe_prefix = "_".join(filter(None, safe_prefix.split('_')))
-        folder_name = f"{safe_prefix}_{current_timestamp}"
-    else:
-        folder_name = current_timestamp
     
-    current_run_output_folder = os.path.join(base_output_folder, folder_name)
-    os.makedirs(current_run_output_folder, exist_ok=True)
-    print(f"Created main output folder for this run: {current_run_output_folder}")
+    Parameters:
+    - lv_file_path: Path to the LabVIEW data file
+    - gc_file_path: Path to the GC data file
+    - base_output_folder: Base folder where reports will be saved
+    - report_prefix_text: Optional prefix text for the report folder name
+    - use_interpolation: Whether to use interpolation for merging data
+    - interpolation_kind: The kind of interpolation to use ('linear', 'cubic', etc.)
+    - use_uniform_grid: Whether to use a uniform time grid
+    - grid_freq: Frequency for the uniform time grid ('1min', '5min', etc.)
+    - existing_report_path: Path to an existing report to add data to (None for new reports)
+    """
+    # Determine output folder based on whether we're adding to existing report or creating a new one
+    if existing_report_path:
+        # We're adding to an existing report
+        current_run_output_folder = existing_report_path
+        folder_name = os.path.basename(existing_report_path)
+        print(f"Adding to existing report folder: {current_run_output_folder}")
+    else:
+        # We're creating a new report
+        current_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if report_prefix_text and report_prefix_text.strip():
+            safe_prefix = report_prefix_text.strip()
+            safe_prefix = safe_prefix.replace(" ", "_")
+            problematic_chars = ['/', '\\\\', '#', '?', '&', '%', ':', '*', '"', '<', '>', '|', '(', ')', '[', ']', '{', '}']
+            for char in problematic_chars:
+                safe_prefix = safe_prefix.replace(char, '_')
+            safe_prefix = "_".join(filter(None, safe_prefix.split('_')))
+            folder_name = f"{safe_prefix}_{current_timestamp}"
+        else:
+            folder_name = current_timestamp
+        
+        current_run_output_folder = os.path.join(base_output_folder, folder_name)
+        os.makedirs(current_run_output_folder, exist_ok=True)
+        print(f"Created main output folder for this run: {current_run_output_folder}")
 
     results = {
         'overall_plot_path': None,
@@ -1589,8 +1770,8 @@ def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_pref
         'interpolation_kind': interpolation_kind if use_interpolation else None,
         'use_uniform_grid': use_uniform_grid if use_interpolation else False,
         'grid_freq': grid_freq if use_interpolation and use_uniform_grid else None,
-        'gc_plot_path': None,
-        'gc_lv_comparison_path': None
+        'timestamp_prefix': folder_name,
+        'is_update': existing_report_path is not None
     }
 
     try:
@@ -1608,6 +1789,71 @@ def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_pref
             results['message'] = "Error: Date column missing from LV data."
             return results
         
+        # Process GC file - now using the enhanced parser
+        print(f"\n=== PROCESSING GC FILE ===")
+        print(f"GC file path: {gc_file_path}")
+        df_gc_full = process_gc_file(gc_file_path)
+        
+        if df_gc_full.empty:
+            print("Warning: GC DataFrame is empty. Proceeding with LV data only.")
+            
+        # If adding to an existing report, check for and merge with existing data
+        if existing_report_path:
+            existing_overall_csv = os.path.join(current_run_output_folder, 'overall_merged_data.csv')
+            if os.path.exists(existing_overall_csv):
+                try:
+                    print(f"\n=== CHECKING EXISTING DATA ===")
+                    print(f"Found existing overall data: {existing_overall_csv}")
+                    
+                    # Load existing data
+                    existing_overall_df = pd.read_csv(existing_overall_csv)
+                    
+                    # Ensure Date column is datetime
+                    existing_overall_df['Date'] = pd.to_datetime(existing_overall_df['Date'])
+                    
+                    # Create a set of existing timestamps for comparison
+                    existing_timestamps = set(existing_overall_df['Date'].dt.strftime('%Y-%m-%d %H:%M:%S'))
+                    
+                    # Convert new LV data timestamps for comparison
+                    df_lv_full['Date'] = pd.to_datetime(df_lv_full['Date'])
+                    
+                    # Filter out already existing timestamps from new LV data
+                    new_only_lv_mask = ~df_lv_full['Date'].dt.strftime('%Y-%m-%d %H:%M:%S').isin(existing_timestamps)
+                    new_only_lv_df = df_lv_full[new_only_lv_mask].copy()
+                    
+                    print(f"Filtered LV data: {len(df_lv_full)} -> {len(new_only_lv_df)} new records")
+                    
+                    if new_only_lv_df.empty:
+                        print("No new LV data points to add.")
+                        results['message'] = "No new data points found to add to the existing report."
+                        results['success'] = False
+                        return results
+                    
+                    # Replace original LV dataframe with filtered version
+                    df_lv_full = new_only_lv_df
+                    
+                    # If GC data is present, also filter it
+                    if not df_gc_full.empty and 'Date' in df_gc_full.columns:
+                        df_gc_full['Date'] = pd.to_datetime(df_gc_full['Date'])
+                        
+                        # Filter out existing timestamps
+                        new_only_gc_mask = ~df_gc_full['Date'].dt.strftime('%Y-%m-%d %H:%M:%S').isin(existing_timestamps)
+                        new_only_gc_df = df_gc_full[new_only_gc_mask].copy()
+                        
+                        print(f"Filtered GC data: {len(df_gc_full)} -> {len(new_only_gc_df)} new records")
+                        
+                        if new_only_gc_df.empty and len(new_only_lv_df) < 10:
+                            print("No new GC data points and very few new LV points.")
+                            results['message'] = "No new GC data points and very few new LV points to add."
+                            results['success'] = False
+                            return results
+                        
+                        # Replace original GC dataframe with filtered version
+                        df_gc_full = new_only_gc_df
+                except Exception as e:
+                    print(f"Error processing existing data: {e}")
+                    # Continue with original data if there's an error
+        
         # Check stages
         if 'Stage' not in df_lv_full.columns or df_lv_full['Stage'].empty or df_lv_full['Stage'].max() == 0:
             num_stages = 0
@@ -1616,33 +1862,6 @@ def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_pref
             num_stages = int(df_lv_full['Stage'].max())
             print(f"Successfully detected {num_stages} stages in LV data.")
         results['num_stages'] = num_stages
-
-        # Process GC file - now using the enhanced parser
-        print(f"\n=== PROCESSING GC FILE ===")
-        print(f"GC file path: {gc_file_path}")
-        df_gc_full = process_gc_file(gc_file_path)
-        
-        if df_gc_full.empty:
-            print("Warning: GC DataFrame is empty. Proceeding with LV data only.")
-
-        # Generate GC visualization
-        if not df_gc_full.empty:
-            try:
-                print(f"\n=== GENERATING GC VISUALIZATION ===")
-                gc_output_folder = os.path.join(current_run_output_folder, "gc_analysis")
-                os.makedirs(gc_output_folder, exist_ok=True)
-                
-                # Create the GC visualization
-                plot_gc_data(df_gc_full, df_lv_full, os.path.join(gc_output_folder, "gc_interpolation_plot.png"))
-                
-                # Add the GC visualization paths to results
-                results['gc_plot_path'] = os.path.join(gc_output_folder, "gc_interpolation_plot.png")
-                results['gc_lv_comparison_path'] = os.path.join(gc_output_folder, "gc_lv_comparison_plot.png")
-                
-                print(f"GC visualization saved to {gc_output_folder}")
-            except Exception as e:
-                print(f"Error generating GC visualization: {e}")
-                # Continue processing even if GC visualization fails
 
         # Overall data merge
         print(f"\n=== PERFORMING OVERALL DATA MERGE ===")
@@ -1660,6 +1879,39 @@ def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_pref
         else:
             print(f"Using traditional merge_asof with tolerance {MERGE_TOLERANCE}...")
             df_merged_overall = merge_overall_data(df_lv_full, df_gc_full)
+            
+        # If we're adding to an existing report and have merged new data, combine with existing data
+        if existing_report_path:
+            existing_overall_csv = os.path.join(current_run_output_folder, 'overall_merged_data.csv')
+            if os.path.exists(existing_overall_csv):
+                try:
+                    print(f"\n=== MERGING WITH EXISTING DATA ===")
+                    # Load existing data
+                    existing_overall_df = pd.read_csv(existing_overall_csv)
+                    existing_overall_df['Date'] = pd.to_datetime(existing_overall_df['Date'])
+                    
+                    # Ensure merged df Date is datetime
+                    df_merged_overall['Date'] = pd.to_datetime(df_merged_overall['Date'])
+                    
+                    # Combine existing and new data
+                    print(f"Existing records: {len(existing_overall_df)}")
+                    print(f"New records: {len(df_merged_overall)}")
+                    
+                    combined_df = pd.concat([existing_overall_df, df_merged_overall], ignore_index=True)
+                    
+                    # Remove duplicates based on Date
+                    combined_df = combined_df.drop_duplicates(subset=['Date'], keep='last')
+                    
+                    # Sort by Date
+                    combined_df = combined_df.sort_values(by='Date')
+                    
+                    # Replace the merged dataframe with the combined one
+                    df_merged_overall = combined_df
+                    
+                    print(f"Combined data: {len(existing_overall_df)} + {len(df_merged_overall)} = {len(combined_df)} total records")
+                except Exception as e:
+                    print(f"Error merging with existing data: {e}")
+                    # Continue with just the new data if there's an error
         
         # Generate overall plot and CSV
         print(f"\n=== GENERATING OVERALL PLOT AND DATA ===")
@@ -1675,8 +1927,28 @@ def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_pref
             stage_counts = df_lv_full['Stage'].value_counts().sort_index()
             print(f"Stage distribution: {dict(stage_counts.head(10))}{'...' if len(stage_counts) > 10 else ''}")
             
+            # Check for existing stages if we're adding to an existing report
+            existing_stages = set()
+            if existing_report_path:
+                try:
+                    for item in os.listdir(current_run_output_folder):
+                        if os.path.isdir(os.path.join(current_run_output_folder, item)) and item.startswith('step_'):
+                            try:
+                                stage_num = int(item.split('_')[1])
+                                existing_stages.add(stage_num)
+                            except:
+                                pass
+                    print(f"Found existing stages: {existing_stages}")
+                except Exception as e:
+                    print(f"Error checking existing stages: {e}")
+            
             successful_stages = 0
             for step_num in range(1, num_stages + 1):
+                # Skip processing for stages that already exist if we're adding to a report
+                if existing_report_path and step_num in existing_stages:
+                    print(f"\n--- Skipping existing Step {step_num} ---")
+                    continue
+                    
                 print(f"\n--- Processing Step {step_num} ---")
                 df_lv_step = df_lv_full[df_lv_full['Stage'] == step_num].copy()
                 
@@ -1739,7 +2011,11 @@ def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_pref
             print("No stages detected. Skipping individual stage processing.")
         
         results['success'] = True
-        results['message'] = "Processing completed successfully."
+        if existing_report_path:
+            results['message'] = f"Successfully added new data to existing report."
+        else:
+            results['message'] = "Processing completed successfully."
+            
         if use_interpolation:
             results['message'] += f" Used {interpolation_kind} interpolation for data fusion."
             if use_uniform_grid:
@@ -1748,7 +2024,6 @@ def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_pref
         print(f"\n=== PROCESSING COMPLETE ===")
         print(f"Overall plot: {'✓' if results['overall_plot_path'] else '✗'}")
         print(f"Overall CSV: {'✓' if results['overall_csv_path'] else '✗'}")
-        print(f"GC plot: {'✓' if results['gc_plot_path'] else '✗'}")
         print(f"Stages processed: {len(results['step_reports'])}/{num_stages}")
         
         if len(results['step_reports']) == 0 and num_stages > 0:

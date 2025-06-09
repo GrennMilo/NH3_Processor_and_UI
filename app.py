@@ -21,6 +21,7 @@ from main_web_processor import (
 from datetime import datetime
 import json
 import time
+import math
 
 app = Flask(__name__, template_folder='templates', static_folder='static') # Create Flask application instance
 
@@ -160,40 +161,52 @@ def api_report_stats(report_name):
                         if 'Date' in entry:
                             dates.append(entry['Date'])
                         
-                        # Temperature data
-                        for temp_key in ['T Heater 1_LV', 'T Heater 1', 'Temperature', 'T_Heater']:
+                        # Temperature data - prioritize "T Heater UP"
+                        temperature_found = False
+                        for temp_key in ['T Heater UP', 'T Heater 1', 'T Heater 1_LV', 'T_Heater_1', 'Temperature']:
                             if temp_key in entry and isinstance(entry[temp_key], (int, float)) and not pd.isna(entry[temp_key]):
                                 temps.append(entry[temp_key])
+                                temperature_found = True
                                 break
                         
-                        # Pressure data
-                        for pressure_key in ['Pressure', 'Pressure_LV', 'Pressure (bar)']:
+                        # Pressure data - prioritize "Pressure reading"
+                        pressure_found = False
+                        for pressure_key in ['Pressure reading', 'Pressure', 'Pressure_LV', 'Pressure (bar)', 'Pressure setpoint', 'Pressure-Setpoint', 'Pressure_SP', 'Pressure SP']:
                             if pressure_key in entry and isinstance(entry[pressure_key], (int, float)) and not pd.isna(entry[pressure_key]):
                                 pressures.append(entry[pressure_key])
+                                pressure_found = True
                                 break
                         
                         # H2 Flow data
+                        h2_found = False
                         for h2_key in ['H2 Actual Flow', 'H2_Flow', 'H2 Flow', 'H2 Flow (ml/min)']:
                             if h2_key in entry and isinstance(entry[h2_key], (int, float)) and not pd.isna(entry[h2_key]):
                                 h2_flows.append(entry[h2_key])
+                                h2_found = True
                                 break
                         
                         # N2 Flow data
+                        n2_found = False
                         for n2_key in ['N2 Actual Flow', 'N2_Flow', 'N2 Flow', 'N2 Flow (ml/min)']:
                             if n2_key in entry and isinstance(entry[n2_key], (int, float)) and not pd.isna(entry[n2_key]):
                                 n2_flows.append(entry[n2_key])
+                                n2_found = True
                                 break
                         
                         # NH3 data
+                        nh3_found = False
                         for nh3_key in ['NH3_GC', 'NH3_clean_GC', 'NH3 (%)', 'NH3']:
                             if nh3_key in entry and isinstance(entry[nh3_key], (int, float)) and not pd.isna(entry[nh3_key]):
                                 nh3_values.append(entry[nh3_key])
+                                nh3_found = True
                                 break
                         
-                        # Outlet mass flow data
-                        for outlet_key in ['Outlet mass flowrate', 'Outlet_mass', 'Mass flowrate (g/h)']:
+                        # Outlet mass flow data - prioritize "Outlet meas.flowrate"
+                        outlet_found = False
+                        for outlet_key in ['Outlet meas.flowrate', 'Outlet g/h', 'Outlet mass flowrate', 'Outlet_mass', 'Mass flowrate (g/h)']:
                             if outlet_key in entry and isinstance(entry[outlet_key], (int, float)) and not pd.isna(entry[outlet_key]):
                                 outlet_values.append(entry[outlet_key])
+                                outlet_found = True
                                 break
                     
                     # Calculate statistics
@@ -201,6 +214,7 @@ def api_report_stats(report_name):
                         max_temp = round(max(t for t in temps if isinstance(t, (int, float))), 1)
                         avg_temp = round(sum(temps) / len(temps), 2)
                     else:
+                        max_temp = None
                         avg_temp = None
                     
                     avg_pressure = round(sum(pressures) / len(pressures), 2) if pressures else None
@@ -254,6 +268,114 @@ def api_report_stats(report_name):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Error getting report stats: {e}'}), 500
+
+@app.route('/api/report-metadata/<report_name>', methods=['GET'])
+def api_get_report_metadata(report_name):
+    """Returns catalyst metadata for a specific report."""
+    try:
+        # Sanitize input to prevent directory traversal attacks
+        report_name = secure_filename(report_name)
+        report_folder = os.path.join(app.config['REPORTS_FOLDER'], report_name)
+        
+        if not os.path.isdir(report_folder):
+            return jsonify({'success': False, 'message': 'Report not found'}), 404
+        
+        # Check if metadata file exists
+        metadata_file_path = os.path.join(report_folder, 'catalyst_metadata.json')
+        
+        if os.path.exists(metadata_file_path):
+            try:
+                with open(metadata_file_path, 'r') as f:
+                    metadata = json.load(f)
+                return jsonify({'success': True, 'metadata': metadata})
+            except Exception as e:
+                print(f"Error reading metadata file: {e}")
+                return jsonify({'success': False, 'message': f'Error reading metadata file: {e}'}), 500
+        else:
+            # Return empty metadata object if no file exists
+            empty_metadata = {
+                'experiment_number': '',
+                'catalyst_batch': '',
+                'reactor_number': '',
+                'catalyst_weight': '',
+                'catalyst_volume': '',
+                'catalyst_state': '',
+                'diluent_type': '',
+                'catalyst_diluent_ratio': '',
+                'catalyst_bed_length': '',
+                'tc_top': '',
+                'tc_bottom': '',
+                'catalyst_notes': '',
+                'created_at': '',
+                'updated_at': ''
+            }
+            return jsonify({'success': True, 'metadata': empty_metadata, 'file_exists': False})
+    
+    except Exception as e:
+        print(f"Error getting report metadata: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error getting report metadata: {e}'}), 500
+
+@app.route('/api/update-report-metadata/<report_name>', methods=['POST'])
+def api_update_report_metadata(report_name):
+    """Updates catalyst metadata for a specific report."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'No metadata provided'}), 400
+        
+        # Sanitize input to prevent directory traversal attacks
+        report_name = secure_filename(report_name)
+        report_folder = os.path.join(app.config['REPORTS_FOLDER'], report_name)
+        
+        if not os.path.isdir(report_folder):
+            return jsonify({'success': False, 'message': 'Report not found'}), 404
+        
+        # Check if metadata file exists and load existing data if it does
+        metadata_file_path = os.path.join(report_folder, 'catalyst_metadata.json')
+        existing_metadata = {}
+        
+        if os.path.exists(metadata_file_path):
+            try:
+                with open(metadata_file_path, 'r') as f:
+                    existing_metadata = json.load(f)
+            except Exception as e:
+                print(f"Error reading existing metadata: {e}")
+                # Continue with empty existing metadata
+        
+        # Update metadata with new values
+        updated_metadata = {
+            'experiment_number': data.get('experiment_number', existing_metadata.get('experiment_number', '')),
+            'catalyst_batch': data.get('catalyst_batch', existing_metadata.get('catalyst_batch', '')),
+            'reactor_number': data.get('reactor_number', existing_metadata.get('reactor_number', '')),
+            'catalyst_weight': data.get('catalyst_weight', existing_metadata.get('catalyst_weight', '')),
+            'catalyst_volume': data.get('catalyst_volume', existing_metadata.get('catalyst_volume', '')),
+            'catalyst_state': data.get('catalyst_state', existing_metadata.get('catalyst_state', '')),
+            'diluent_type': data.get('diluent_type', existing_metadata.get('diluent_type', '')),
+            'catalyst_diluent_ratio': data.get('catalyst_diluent_ratio', existing_metadata.get('catalyst_diluent_ratio', '')),
+            'catalyst_bed_length': data.get('catalyst_bed_length', existing_metadata.get('catalyst_bed_length', '')),
+            'tc_top': data.get('tc_top', existing_metadata.get('tc_top', '')),
+            'tc_bottom': data.get('tc_bottom', existing_metadata.get('tc_bottom', '')),
+            'catalyst_notes': data.get('catalyst_notes', existing_metadata.get('catalyst_notes', '')),
+            'created_at': existing_metadata.get('created_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        # Save updated metadata
+        try:
+            with open(metadata_file_path, 'w') as f:
+                json.dump(updated_metadata, f, indent=2)
+            return jsonify({'success': True, 'message': 'Metadata updated successfully', 'metadata': updated_metadata})
+        except Exception as e:
+            print(f"Error saving updated metadata: {e}")
+            return jsonify({'success': False, 'message': f'Error saving metadata: {e}'}), 500
+    
+    except Exception as e:
+        print(f"Error updating report metadata: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error updating report metadata: {e}'}), 500
 
 @app.route('/api/report-contents/<report_name>')
 def api_report_contents(report_name):
@@ -385,7 +507,7 @@ def api_dashboard_data():
         
         # List only directories directly under the reports folder
         all_items = os.listdir(reports_base)
-        report_folders = [d for d in all_items if os.path.isdir(os.path.join(reports_base, d))]
+        report_folders = [d for d in all_items if os.path.isdir(os.path.join(reports_base, d)) and d != 'cross_comparisons']
         
         # Sort by creation time, newest first
         report_folders.sort(key=lambda x: os.path.getctime(os.path.join(reports_base, x)), reverse=True)
@@ -399,24 +521,44 @@ def api_dashboard_data():
         
         # Get information for the most recent reports (up to 5)
         recent_reports = []
-        for folder in report_folders[:5]:
+        reports_stats = []
+        
+        for folder in report_folders:
             folder_path = os.path.join(reports_base, folder)
             created_at = datetime.fromtimestamp(os.path.getctime(folder_path)).strftime('%Y-%m-%d %H:%M:%S')
             
             # Count number of stages by looking for step_* directories
             step_folders = [d for d in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, d)) and d.startswith('step_')]
             
-            recent_reports.append({
+            # Only add to recent_reports if it's one of the first 5
+            if len(recent_reports) < 5:
+                recent_reports.append({
+                    'name': folder,
+                    'created_at': created_at,
+                    'stages': len(step_folders)
+                })
+            
+            # Calculate total data points
+            data_points = 0
+            overall_csv_path = os.path.join(folder_path, 'overall_merged_data.csv')
+            if os.path.exists(overall_csv_path):
+                try:
+                    df = pd.read_csv(overall_csv_path)
+                    data_points = len(df)
+                except Exception as e:
+                    print(f"Error reading overall CSV for {folder}: {e}")
+            
+            reports_stats.append({
                 'name': folder,
-                'created_at': created_at,
-                'stages': len(step_folders)
+                'data_points': data_points
             })
         
         return jsonify({
             'success': True,
             'total_reports': total_reports,
             'recent_uploads': recent_uploads,
-            'recent_reports': recent_reports
+            'recent_reports': recent_reports,
+            'reports_stats': reports_stats
         })
     except Exception as e:
         print(f"Error getting dashboard data: {e}")
@@ -479,8 +621,36 @@ def process_files():
 
         # --- Data Processing ---
         try:
-            # Get the custom report prefix text from the form
-            report_prefix_text = request.form.get('report_prefix_text', '').strip()
+            # Get the processing mode (new or add)
+            processing_mode = request.form.get('processing_mode', 'new')
+            
+            # Path to existing report if in 'add' mode
+            existing_report_path = None
+            if processing_mode == 'add':
+                existing_report_name = request.form.get('existing_report')
+                if not existing_report_name:
+                    return jsonify({'success': False, 'message': 'No existing report specified for add mode.'}), 400
+                
+                # Sanitize to prevent directory traversal attacks
+                existing_report_name = secure_filename(existing_report_name)
+                existing_report_path = os.path.join(REPORTS_FOLDER, existing_report_name)
+                
+                if not os.path.isdir(existing_report_path):
+                    return jsonify({'success': False, 'message': f'Existing report not found: {existing_report_name}'}), 404
+            
+            # Get the metadata fields to generate the report prefix for new mode
+            report_prefix_text = None
+            if processing_mode == 'new':
+                experiment_number = request.form.get('experiment_number', '').strip()
+                catalyst_batch = request.form.get('catalyst_batch', '').strip()
+                reactor_number = request.form.get('reactor_number', '').strip()
+                
+                if experiment_number and catalyst_batch and reactor_number:
+                    # Generate the prefix from metadata fields
+                    report_prefix_text = f"{experiment_number}_{catalyst_batch}_{reactor_number}"
+                else:
+                    # If metadata is missing, use a generic timestamp
+                    report_prefix_text = None
             
             # Get interpolation parameters from the form
             use_interpolation = request.form.get('use_interpolation', 'false').lower() == 'true'
@@ -510,8 +680,80 @@ def process_files():
                 use_interpolation=use_interpolation,
                 interpolation_kind=interpolation_kind,
                 use_uniform_grid=use_uniform_grid,
-                grid_freq=grid_freq
+                grid_freq=grid_freq,
+                existing_report_path=existing_report_path
             )
+            
+            # --- Save Catalyst Metadata ---
+            if results.get('success') and results.get('timestamp_prefix'):
+                report_folder = os.path.join(REPORTS_FOLDER, results['timestamp_prefix'])
+                
+                # For new reports, create metadata from form
+                if processing_mode == 'new':
+                    # Get all the catalyst metadata from the form
+                    catalyst_metadata = {
+                        'experiment_number': request.form.get('experiment_number', ''),
+                        'catalyst_batch': request.form.get('catalyst_batch', ''),
+                        'reactor_number': request.form.get('reactor_number', ''),
+                        'catalyst_weight': request.form.get('catalyst_weight', ''),
+                        'catalyst_volume': request.form.get('catalyst_volume', ''),
+                        'catalyst_state': request.form.get('catalyst_state', ''),
+                        'diluent_type': request.form.get('diluent_type', ''),
+                        'catalyst_diluent_ratio': request.form.get('catalyst_diluent_ratio', ''),
+                        'catalyst_bed_length': request.form.get('catalyst_bed_length', ''),
+                        'tc_top': request.form.get('tc_top', ''),
+                        'tc_bottom': request.form.get('tc_bottom', ''),
+                        'catalyst_notes': request.form.get('catalyst_notes', ''),
+                        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    
+                    # Create the metadata file in the report folder
+                    metadata_file_path = os.path.join(report_folder, 'catalyst_metadata.json')
+                    
+                    try:
+                        with open(metadata_file_path, 'w') as f:
+                            json.dump(catalyst_metadata, f, indent=2)
+                        print(f"Catalyst metadata saved to: {metadata_file_path}")
+                        # Add metadata saved flag to results
+                        results['metadata_saved'] = True
+                    except Exception as e:
+                        print(f"Error saving catalyst metadata: {e}")
+                        results['metadata_saved'] = False
+                # For existing reports, the metadata file should already exist
+                # No need to update it when adding new data points
+                else:
+                    # Check if metadata file exists and if not, create an empty one
+                    metadata_file_path = os.path.join(report_folder, 'catalyst_metadata.json')
+                    if not os.path.exists(metadata_file_path):
+                        # Create a default metadata file with empty values
+                        default_metadata = {
+                            'experiment_number': '',
+                            'catalyst_batch': '',
+                            'reactor_number': '',
+                            'catalyst_weight': '',
+                            'catalyst_volume': '',
+                            'catalyst_state': '',
+                            'diluent_type': '',
+                            'catalyst_diluent_ratio': '',
+                            'catalyst_bed_length': '',
+                            'tc_top': '',
+                            'tc_bottom': '',
+                            'catalyst_notes': '',
+                            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        }
+                        try:
+                            with open(metadata_file_path, 'w') as f:
+                                json.dump(default_metadata, f, indent=2)
+                            print(f"Default metadata created for existing report: {metadata_file_path}")
+                        except Exception as e:
+                            print(f"Error creating default metadata: {e}")
+                    
+                    # In 'add' mode, we're reusing the same report directory
+                    # Just inform the user metadata is preserved
+                    results['metadata_saved'] = True
+                    results['metadata_preserved'] = True
             
             # --- Cleanup Uploaded Files (Optional) ---
             # You might want to keep these for debugging or remove them
@@ -524,7 +766,7 @@ def process_files():
             
             # Adjust paths in results to be relative to static folder root
             # Ensure the paths start with 'static/' for web access
-            static_folder_name = os.path.basename(app.static_folder) # Usually 'static'
+            static_folder_name = os.path.basename(app.static_folder)
 
             # Determine the actual folder name used (prefix + timestamp or just timestamp)
             # This is a bit more complex now, need to get it from one of the paths if available
@@ -536,12 +778,11 @@ def process_files():
             elif results.get('overall_csv_path'):
                 actual_report_folder_name = os.path.basename(os.path.dirname(results['overall_csv_path']))
             elif results.get('step_reports') and results['step_reports'][0].get('plot_path'):
-                 actual_report_folder_name = os.path.basename(os.path.dirname(os.path.dirname(results['step_reports'][0]['plot_path'])))
+                actual_report_folder_name = os.path.basename(os.path.dirname(os.path.dirname(results['step_reports'][0]['plot_path'])))
             # Fallback if no files generated but folder might exist (e.g. empty data)
-            # This part relies on the fact that generate_reports would have created the folder already
-            # We need to be careful here; the results structure should ideally always give us the folder name
-            # For now, let's assume one of the above conditions will hit if a folder was made for results.
-
+            elif results.get('timestamp_prefix'):
+                actual_report_folder_name = results['timestamp_prefix']
+            
             if results.get('overall_plot_path'):
                 relative_path = os.path.relpath(results['overall_plot_path'], app.static_folder)
                 results['overall_plot_path'] = os.path.join(static_folder_name, relative_path).replace('\\', '/')
@@ -691,8 +932,6 @@ def load_report(timestamp):
         # Get overall plot paths
         overall_plot_path = None
         overall_csv_path = None
-        gc_plot_path = None
-        gc_lv_comparison_path = None
         
         # Check for overall plot JSON
         overall_plot_json = os.path.join(report_folder, 'overall_plot.json')
@@ -703,19 +942,6 @@ def load_report(timestamp):
         overall_csv = os.path.join(report_folder, 'overall_merged_data.csv')
         if os.path.exists(overall_csv):
             overall_csv_path = os.path.join('static', 'reports', timestamp, 'overall_merged_data.csv')
-        
-        # Check for GC visualizations
-        gc_analysis_folder = os.path.join(report_folder, 'gc_analysis')
-        if os.path.exists(gc_analysis_folder):
-            # Check for GC interpolation plot
-            gc_interp_plot = os.path.join(gc_analysis_folder, 'gc_interpolation_plot.png')
-            if os.path.exists(gc_interp_plot):
-                gc_plot_path = os.path.join('static', 'reports', timestamp, 'gc_analysis', 'gc_interpolation_plot.png')
-            
-            # Check for GC/LV comparison plot
-            gc_lv_comp_plot = os.path.join(gc_analysis_folder, 'gc_lv_comparison_plot.png')
-            if os.path.exists(gc_lv_comp_plot):
-                gc_lv_comparison_path = os.path.join('static', 'reports', timestamp, 'gc_analysis', 'gc_lv_comparison_plot.png')
         
         # Count stages
         stage_folders = sorted(
@@ -772,8 +998,6 @@ def load_report(timestamp):
             'timestamp_prefix': timestamp,
             'overall_plot_path': overall_plot_path,
             'overall_csv_path': overall_csv_path,
-            'gc_plot_path': gc_plot_path,
-            'gc_lv_comparison_path': gc_lv_comparison_path,
             'num_stages': num_stages,
             'step_reports': step_reports,
             'comparison_plots': comparison_plots
@@ -794,6 +1018,9 @@ def compare_stages():
         stage_numbers = data.get('stages')
         comparison_prefix = data.get('comparison_prefix', '').strip() # Get the prefix
 
+        print(f"Received request to compare stages in report {timestamp}: {stage_numbers}")
+        print(f"Using comparison prefix: '{comparison_prefix}'")
+
         if not timestamp or not stage_numbers or not isinstance(stage_numbers, list) or len(stage_numbers) < 1:
             return jsonify({'success': False, 'message': 'Missing or invalid timestamp or stage numbers.'}), 400
 
@@ -808,6 +1035,7 @@ def compare_stages():
             json_file = os.path.join(report_folder_abs, f'step_{stage_num}', f'step_{stage_num}_data.json')
             if os.path.exists(json_file):
                 stage_data_paths.append(json_file)
+                print(f"Found JSON data file for stage {stage_num}: {json_file}")
             else:
                 print(f"Warning: Data file not found for stage {stage_num} in report {timestamp}: {json_file}")
                 # Decide if you want to fail or just proceed with available data
@@ -818,15 +1046,25 @@ def compare_stages():
 
         # Call the new function to generate the comparison plot
         # It needs the base output folder to save the plot
-        comparison_plot_path = generate_comparison_plot(stage_data_paths, report_folder_abs, comparison_prefix) # Pass the prefix
+        try:
+            print(f"Calling generate_comparison_plot with {len(stage_data_paths)} files and prefix '{comparison_prefix}'")
+            comparison_plot_path = generate_comparison_plot(stage_data_paths, report_folder_abs, comparison_prefix) # Pass the prefix
+        except Exception as plot_error:
+            print(f"Error in generate_comparison_plot function: {plot_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'message': f'Error generating comparison plot: {plot_error}'}), 500
 
         if comparison_plot_path:
+            print(f"Successfully generated comparison plot: {comparison_plot_path}")
             # Convert the absolute path to a web-accessible path (relative to static)
             static_folder_name = os.path.basename(app.static_folder)
             relative_path = os.path.relpath(comparison_plot_path, app.static_folder)
             web_path = os.path.join(static_folder_name, relative_path).replace('\\', '/')
+            print(f"Web-accessible path: {web_path}")
             return jsonify({'success': True, 'comparison_plot_path': web_path})
         else:
+            print("generate_comparison_plot returned None")
             return jsonify({'success': False, 'message': 'Failed to generate comparison plot.'}), 500
 
     except Exception as e:
@@ -873,6 +1111,11 @@ def generate_cross_report_comparison():
         current_report_ts = data.get('current_report_timestamp')
         current_selected_stages = data.get('current_report_selected_stages', [])
 
+        print(f"Received cross-comparison request:")
+        print(f"- Selected JSON paths: {selected_json_rel_paths}")
+        print(f"- Current report: {current_report_ts}")
+        print(f"- Selected stages: {current_selected_stages}")
+
         if not selected_json_rel_paths and not (current_report_ts and current_selected_stages):
             return jsonify({'success': False, 'message': 'No data sources provided for cross-comparison.'}), 400
 
@@ -901,19 +1144,29 @@ def generate_cross_report_comparison():
                     print(f"Warning: Selected comparison JSON not found at {abs_path} (from relative {rel_path})")
 
         # Call the processing function from main_web_processor
-        cross_plot_abs_path = create_cross_comparison_plot(
-            selected_comparison_json_file_paths=absolute_selected_json_paths,
-            current_report_timestamp=current_report_ts,
-            current_report_selected_stages=current_selected_stages,
-            base_reports_folder_abs=static_reports_folder_abs 
-        )
+        try:
+            print(f"Calling create_cross_comparison_plot with {len(absolute_selected_json_paths)} files")
+            cross_plot_abs_path = create_cross_comparison_plot(
+                selected_comparison_json_file_paths=absolute_selected_json_paths,
+                current_report_timestamp=current_report_ts,
+                current_report_selected_stages=current_selected_stages,
+                base_reports_folder_abs=static_reports_folder_abs 
+            )
+        except Exception as plot_error:
+            print(f"Error in create_cross_comparison_plot function: {plot_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'message': f'Error generating cross-comparison plot: {plot_error}'}), 500
 
         if cross_plot_abs_path:
+            print(f"Successfully generated cross-comparison plot: {cross_plot_abs_path}")
             # Convert the absolute path of the new plot to a web-accessible relative path (from project root)
             # e.g., static/reports/cross_comparisons/cross_comp_TIMESTAMP/plot.json
             web_path = os.path.relpath(cross_plot_abs_path, base_dir).replace('\\', '/')
+            print(f"Web-accessible path: {web_path}")
             return jsonify({'success': True, 'cross_comparison_plot_path': web_path})
         else:
+            print("create_cross_comparison_plot returned None")
             return jsonify({'success': False, 'message': 'Failed to generate cross-comparison plot.'}), 500
 
     except Exception as e:
@@ -1238,6 +1491,196 @@ def delete_report_file():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Error deleting file: {e}'}), 500
+
+# --- New API Endpoints for Enhanced Index Page ---
+@app.route('/api/detailed-reports-list')
+def api_detailed_reports_list():
+    """Returns detailed information about all reports including data points, date ranges, etc."""
+    try:
+        reports_base = app.config['REPORTS_FOLDER']
+        
+        # List only directories directly under the reports folder
+        all_items = os.listdir(reports_base)
+        report_folders = [d for d in all_items if os.path.isdir(os.path.join(reports_base, d))]
+        
+        # Sort by creation time, newest first
+        report_folders.sort(key=lambda x: os.path.getctime(os.path.join(reports_base, x)), reverse=True)
+        
+        reports_data = []
+        for folder in report_folders:
+            # Skip non-report folders
+            if folder in ['cross_comparisons']:
+                continue
+                
+            # Get basic stats for each report
+            folder_path = os.path.join(reports_base, folder)
+            created_at = datetime.fromtimestamp(os.path.getctime(folder_path)).strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Count number of stages by looking for step_* directories
+            step_folders = [d for d in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, d)) and d.startswith('step_')]
+            step_folders.sort(key=lambda x: int(x.split('_')[1]) if x.split('_')[1].isdigit() else 0)
+            
+            # Calculate total data points and date range
+            total_data_points = 0
+            date_start = None
+            date_end = None
+            
+            # Get data from overall CSV if it exists
+            overall_csv_path = os.path.join(folder_path, 'overall_merged_data.csv')
+            if os.path.exists(overall_csv_path):
+                try:
+                    df = pd.read_csv(overall_csv_path)
+                    total_data_points = len(df)
+                    
+                    if 'Date' in df.columns:
+                        # Convert to datetime if it's a string
+                        if df['Date'].dtype == 'object':
+                            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                            
+                        date_values = df['Date'].dropna()
+                        if not date_values.empty:
+                            date_start = date_values.min().strftime('%Y-%m-%d %H:%M:%S')
+                            date_end = date_values.max().strftime('%Y-%m-%d %H:%M:%S')
+                except Exception as e:
+                    print(f"Error reading overall CSV for {folder}: {e}")
+                    # If we can't read the CSV, try to get data from individual stages
+            
+            # If no data from overall CSV, collect from individual stages
+            if total_data_points == 0 or date_start is None:
+                for step_folder in step_folders:
+                    step_num = int(step_folder.split('_')[1]) if step_folder.split('_')[1].isdigit() else 0
+                    step_json = os.path.join(folder_path, step_folder, f"step_{step_num}_data.json")
+                    
+                    if os.path.exists(step_json):
+                        try:
+                            with open(step_json, 'r') as f:
+                                step_data = json.load(f)
+                            
+                            total_data_points += len(step_data)
+                            
+                            # Extract date range
+                            dates = []
+                            for entry in step_data:
+                                if 'Date' in entry:
+                                    try:
+                                        # Handle ISO format with Z
+                                        if isinstance(entry['Date'], str) and 'Z' in entry['Date']:
+                                            date_obj = datetime.fromisoformat(entry['Date'].replace('Z', '+00:00'))
+                                            dates.append(date_obj)
+                                        else:
+                                            # Try to parse using pandas which handles multiple formats
+                                            date_obj = pd.to_datetime(entry['Date'])
+                                            if not pd.isna(date_obj):
+                                                dates.append(date_obj.to_pydatetime())
+                                    except Exception as e:
+                                        # Just skip this date if it can't be parsed
+                                        print(f"Error parsing date {entry.get('Date')}: {e}")
+                            
+                            if dates:
+                                min_date = min(dates)
+                                max_date = max(dates)
+                                
+                                # Only update if not already set or this is earlier/later
+                                if date_start is None:
+                                    date_start = min_date.strftime('%Y-%m-%d %H:%M:%S')
+                                else:
+                                    try:
+                                        current_start = datetime.strptime(date_start, '%Y-%m-%d %H:%M:%S')
+                                        if min_date < current_start:
+                                            date_start = min_date.strftime('%Y-%m-%d %H:%M:%S')
+                                    except:
+                                        date_start = min_date.strftime('%Y-%m-%d %H:%M:%S')
+                                
+                                if date_end is None:
+                                    date_end = max_date.strftime('%Y-%m-%d %H:%M:%S')
+                                else:
+                                    try:
+                                        current_end = datetime.strptime(date_end, '%Y-%m-%d %H:%M:%S')
+                                        if max_date > current_end:
+                                            date_end = max_date.strftime('%Y-%m-%d %H:%M:%S')
+                                    except:
+                                        date_end = max_date.strftime('%Y-%m-%d %H:%M:%S')
+                        except Exception as e:
+                            print(f"Error processing JSON for stage {step_num} in report {folder}: {e}")
+            
+            reports_data.append({
+                'name': folder,
+                'created_at': created_at,
+                'stages': len(step_folders),
+                'data_points': total_data_points,
+                'date_start': date_start,
+                'date_end': date_end
+            })
+        
+        return jsonify({'success': True, 'reports': reports_data})
+    except Exception as e:
+        print(f"Error listing detailed reports: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error listing reports: {e}'}), 500
+
+@app.route('/api/original-files')
+def api_original_files():
+    """Lists all files in the uploads folder with their types and sizes."""
+    try:
+        uploads_folder = app.config['UPLOAD_FOLDER']
+        
+        # Get all files in the uploads folder
+        files = []
+        for filename in os.listdir(uploads_folder):
+            file_path = os.path.join(uploads_folder, filename)
+            
+            # Skip directories and hidden files
+            if os.path.isdir(file_path) or filename.startswith('.'):
+                continue
+                
+            # Get file size
+            size_bytes = os.path.getsize(file_path)
+            
+            # Format file size
+            if size_bytes == 0:
+                size_str = '0 Bytes'
+            else:
+                k = 1024
+                sizes = ['Bytes', 'KB', 'MB', 'GB']
+                i = int(math.log(size_bytes, k))
+                size_str = f"{size_bytes / (k ** i):.2f} {sizes[i]}"
+            
+            files.append({
+                'name': filename,
+                'size': size_str,
+                'size_bytes': size_bytes
+            })
+        
+        # Sort by size (largest first)
+        files.sort(key=lambda x: x['size_bytes'], reverse=True)
+        
+        return jsonify({'success': True, 'files': files})
+    except Exception as e:
+        print(f"Error listing original files: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error listing files: {e}'}), 500
+
+@app.route('/download_original_file/<filename>')
+def download_original_file(filename):
+    """Allows downloading the original files from uploads folder."""
+    try:
+        # Sanitize filename to prevent path traversal
+        filename = secure_filename(filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
+        # Check if file exists
+        if not os.path.isfile(file_path):
+            return jsonify({'success': False, 'message': f'File not found: {filename}'}), 404
+        
+        # Send file for download
+        return send_file(file_path, as_attachment=True, download_name=filename)
+    except Exception as e:
+        print(f"Error downloading file {filename}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error downloading file: {e}'}), 500
 
 # --- Main Execution ---
 if __name__ == '__main__':
