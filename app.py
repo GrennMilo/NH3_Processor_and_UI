@@ -22,6 +22,11 @@ from datetime import datetime
 import json
 import time
 import math
+# Import database modules
+from Database.nh3_synth_database import NH3SynthDatabaseProcessor
+from Database.database_models import init_db, get_session, Experiment, PlotSummary, ExperimentStep, StepDataPoint
+from pathlib import Path
+import tempfile
 
 app = Flask(__name__, template_folder='templates', static_folder='static') # Create Flask application instance
 
@@ -38,6 +43,34 @@ if not os.path.exists(REPORTS_FOLDER):
     os.makedirs(REPORTS_FOLDER)
 # Explicitly add the path to the app config dictionary
 app.config['REPORTS_FOLDER'] = REPORTS_FOLDER 
+
+# Define database folder
+DATABASE_FOLDER = 'Database'
+if not os.path.exists(DATABASE_FOLDER):
+    os.makedirs(DATABASE_FOLDER)
+app.config['DATABASE_FOLDER'] = DATABASE_FOLDER
+
+# Initialize database for API
+db_path = os.path.join(DATABASE_FOLDER, 'nh3_synth.db')
+app.config['DATABASE_PATH'] = db_path
+
+# Set recreate_db to False to avoid lock issues on startup
+recreate_db = False
+
+# Initialize database during startup
+try:
+    with app.app_context():
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH'],
+            recreate_db=recreate_db
+        )
+    print(f"Database initialized at {app.config['DATABASE_PATH']}")
+except Exception as e:
+    print(f"Error initializing database: {e}")
+    import traceback
+    traceback.print_exc()
+    print("The application will continue without database initialization.")
 
 # Define allowed file extensions
 ALLOWED_EXTENSIONS = {'txt'}
@@ -1681,6 +1714,480 @@ def download_original_file(filename):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Error downloading file: {e}'}), 500
+
+# --- Routes for Database Management ---
+@app.route('/api/database/generate', methods=['POST'])
+def generate_database():
+    """Generate the database from all reports."""
+    recreate = request.json.get('recreate', False) if request.is_json else False
+    
+    try:
+        # Initialize the database processor
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH'],
+            recreate_db=recreate
+        )
+        
+        # Process all reports
+        processor.process_all_reports()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error generating database: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/database/experiments')
+def api_list_experiments():
+    """Lists all experiments in the database."""
+    try:
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH']
+        )
+        
+        # Get all experiments
+        experiments_df = processor.list_experiments()
+        
+        # Convert DataFrame to list of dicts for JSON response
+        experiments = experiments_df.to_dict(orient='records')
+        
+        return jsonify({
+            'success': True,
+            'experiments': experiments
+        })
+    except Exception as e:
+        print(f"Error listing experiments: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error listing experiments: {e}'}), 500
+
+@app.route('/api/database/experiment/<experiment_id>')
+def api_get_experiment(experiment_id):
+    """Gets detailed information about a specific experiment."""
+    try:
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH']
+        )
+        
+        # Get experiment details
+        experiment = processor.get_experiment_details(experiment_id)
+        
+        if not experiment:
+            return jsonify({'success': False, 'message': f'Experiment {experiment_id} not found.'}), 404
+        
+        return jsonify({
+            'success': True,
+            'experiment': experiment
+        })
+    except Exception as e:
+        print(f"Error getting experiment {experiment_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error getting experiment details: {e}'}), 500
+
+@app.route('/api/database/experiment/<experiment_id>/steps')
+def api_get_experiment_steps(experiment_id):
+    """Gets information about the steps in a specific experiment."""
+    try:
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH']
+        )
+        
+        # Get steps information
+        steps = processor.analyze_experiment_steps(experiment_id)
+        
+        if not steps:
+            return jsonify({'success': False, 'message': f'Steps for experiment {experiment_id} not found.'}), 404
+        
+        return jsonify({
+            'success': True,
+            'steps': steps
+        })
+    except Exception as e:
+        print(f"Error getting steps for experiment {experiment_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error getting experiment steps: {e}'}), 500
+
+@app.route('/api/database/add-to-database/<report_name>', methods=['POST'])
+def api_add_report_to_database(report_name):
+    """Adds a specific report to the database."""
+    try:
+        # Sanitize report name
+        report_name = secure_filename(report_name)
+        report_path = os.path.join(app.config['REPORTS_FOLDER'], report_name)
+        
+        if not os.path.isdir(report_path):
+            return jsonify({'success': False, 'message': f'Report {report_name} not found.'}), 404
+        
+        # Create processor instance
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH']
+        )
+        
+        # Check if this experiment already exists in the database
+        existing_experiment = processor.session.query(Experiment).filter_by(report_folder=report_name).first()
+        
+        if existing_experiment:
+            return jsonify({
+                'success': False, 
+                'message': f'Experiment {report_name} already exists in database.',
+                'experiment_id': existing_experiment.id
+            }), 409
+        
+        # Process this specific report
+        # Since the processor doesn't have a direct method to process a single report,
+        # we'll implement our own logic here based on the processor's code
+        
+        # Read metadata
+        metadata = processor.read_metadata_json(Path(report_path))
+        if not metadata:
+            return jsonify({'success': False, 'message': f'Failed to read metadata for {report_name}.'}), 500
+        
+        # Extract plot summary
+        plot_summary_data = processor.extract_plot_summary(Path(report_path))
+        
+        # Create experiment record
+        experiment = Experiment(
+            report_folder=report_name,
+            experiment_id=metadata.get('experiment_id', ''),
+            reactor_id=metadata.get('reactor_number', ''),
+            date=metadata.get('created_at', ''),
+            time=metadata.get('folder_timestamp', ''),
+            experiment_metadata=metadata
+        )
+        
+        # Create plot summary record
+        plot_summary = PlotSummary(
+            plot_file_size=plot_summary_data.get('plot_file_size', 0),
+            num_data_points=plot_summary_data.get('num_data_points', 0),
+            parameters=json.dumps(plot_summary_data.get('parameters', [])),
+            first_timestamp=plot_summary_data.get('first_timestamp'),
+            last_timestamp=plot_summary_data.get('last_timestamp')
+        )
+        
+        # Associate plot summary with experiment
+        experiment.plot_summary = plot_summary
+        
+        # Analyze experiment steps
+        step_analysis = processor.analyze_experiment_steps_data(Path(report_path))
+        
+        # Create step records and their data points
+        total_data_points = 0
+        for step_num, step_data in step_analysis.get('steps', {}).items():
+            step = ExperimentStep(
+                step_number=int(step_num),
+                folder=step_data.get('folder', ''),
+                has_data_json=1 if step_data.get('has_data_json') else 0,
+                has_plot_json=1 if step_data.get('has_plot_json') else 0,
+                data_file_size=step_data.get('data_file_size', 0),
+                plot_file_size=step_data.get('plot_file_size', 0),
+                temperature=step_data.get('T Reactor (sliding TC)'),
+                pressure=step_data.get('Pressure reading'),
+                h2_flow=step_data.get('H2 Actual Flow'),
+                n2_flow=step_data.get('N2 Actual Flow'),
+                stage=step_data.get('Stage'),
+                data_points_count=len(step_data.get('data_points', []))
+            )
+            
+            # Add to experiment
+            experiment.steps.append(step)
+            
+            # Create data point records
+            for point_data in step_data.get('data_points', []):
+                try:
+                    # Parse timestamp string to datetime object
+                    timestamp = None
+                    if point_data.get('timestamp'):
+                        try:
+                            timestamp = datetime.fromisoformat(point_data['timestamp'])
+                        except (ValueError, TypeError):
+                            # Try with different format if ISO format fails
+                            try:
+                                timestamp = datetime.strptime(point_data['timestamp'], '%Y-%m-%d %H:%M:%S')
+                            except (ValueError, TypeError):
+                                pass  # Leave as None if parsing fails
+                    
+                    # Create data point record
+                    data_point = StepDataPoint(
+                        relative_time=point_data.get('relative_time'),
+                        timestamp=timestamp,
+                        t_reactor=point_data.get('t_reactor'),
+                        pressure=point_data.get('pressure'),
+                        h2_flow=point_data.get('h2_flow'),
+                        n2_flow=point_data.get('n2_flow'),
+                        nh3_concentration=point_data.get('nh3_concentration'),
+                        outlet_flow=point_data.get('outlet_flow'),
+                        raw_data=point_data.get('raw_data')
+                    )
+                    
+                    # Add to step
+                    step.data_points.append(data_point)
+                    total_data_points += 1
+                    
+                except Exception as point_error:
+                    print(f"Error processing data point in step {step_num}: {str(point_error)}")
+                    continue
+        
+        # Add to session and commit
+        processor.session.add(experiment)
+        processor.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Added experiment {report_name} to database',
+            'experiment_id': experiment.id
+        })
+    except Exception as e:
+        print(f"Error adding report {report_name} to database: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error adding report to database: {e}'}), 500
+
+@app.route('/api/database/download/<format>')
+def api_download_database(format):
+    """Downloads the database in CSV or JSON format."""
+    try:
+        if format not in ['csv', 'json']:
+            return jsonify({'success': False, 'message': 'Invalid format. Use csv or json.'}), 400
+        
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH']
+        )
+        
+        if format == 'csv':
+            path = processor.export_database_to_csv()
+            if not path:
+                return jsonify({'success': False, 'message': 'Failed to generate CSV export.'}), 500
+            return send_file(path, as_attachment=True, download_name='nh3_synth_database.csv')
+        else:
+            path = processor.export_database_to_json()
+            if not path:
+                return jsonify({'success': False, 'message': 'Failed to generate JSON export.'}), 500
+            return send_file(path, as_attachment=True, download_name='nh3_synth_database.json')
+    except Exception as e:
+        print(f"Error downloading database in {format} format: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error downloading database: {e}'}), 500
+
+@app.route('/database')
+def database_page():
+    """Serves the database management page."""
+    return render_template('database.html')
+
+@app.route('/api/database/experiment/<experiment_id>/step/<int:step_number>/data')
+def api_get_step_data_points(experiment_id, step_number):
+    """Gets data points for a specific step in an experiment."""
+    try:
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH']
+        )
+        
+        # Get data points
+        data_points = processor.get_step_data_points(experiment_id, step_number)
+        
+        if not data_points:
+            return jsonify({'success': False, 'message': f'No data points found for step {step_number} in experiment {experiment_id}.'}), 404
+        
+        # Limit the number of data points returned to avoid overwhelming the client
+        max_points = 1000
+        if len(data_points) > max_points:
+            sampled_points = []
+            step = len(data_points) // max_points
+            for i in range(0, len(data_points), step):
+                sampled_points.append(data_points[i])
+            data_points = sampled_points[:max_points]
+            sampled = True
+        else:
+            sampled = False
+        
+        return jsonify({
+            'success': True,
+            'step_number': step_number,
+            'experiment_id': experiment_id,
+            'data_points': data_points,
+            'total_points': len(data_points),
+            'sampled': sampled
+        })
+    except Exception as e:
+        print(f"Error getting data points for step {step_number} in experiment {experiment_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error getting step data points: {e}'}), 500
+
+@app.route('/api/database/experiment/<experiment_id>/step/<int:step_number>/export')
+def api_export_step_data(experiment_id, step_number):
+    """Exports data points for a specific step to a CSV file."""
+    try:
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH']
+        )
+        
+        # Export to CSV
+        csv_path = processor.export_step_data_to_csv(experiment_id, step_number)
+        
+        if not csv_path:
+            return jsonify({'success': False, 'message': f'Failed to export data for step {step_number} in experiment {experiment_id}.'}), 500
+        
+        # Return file for download
+        return send_file(csv_path, as_attachment=True, download_name=f'{experiment_id}_step_{step_number}_data.csv')
+    except Exception as e:
+        print(f"Error exporting data for step {step_number} in experiment {experiment_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error exporting step data: {e}'}), 500
+
+@app.route('/api/database/experiment/<experiment_id>/export')
+def api_export_experiment_data(experiment_id):
+    """Exports all data points for an experiment to a CSV file."""
+    try:
+        processor = NH3SynthDatabaseProcessor(
+            reports_dir=app.config['REPORTS_FOLDER'],
+            db_path=app.config['DATABASE_PATH']
+        )
+        
+        # Export to CSV
+        csv_path = processor.export_experiment_data_to_csv(experiment_id)
+        
+        if not csv_path:
+            return jsonify({'success': False, 'message': f'Failed to export data for experiment {experiment_id}.'}), 500
+        
+        # Return file for download
+        return send_file(csv_path, as_attachment=True, download_name=f'{experiment_id}_all_data.csv')
+    except Exception as e:
+        print(f"Error exporting data for experiment {experiment_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error exporting experiment data: {e}'}), 500
+
+@app.route('/api/database/experiments/<int:experiment_id>/steps/<int:step_id>/datapoints', methods=['GET'])
+def get_step_data_points(experiment_id, step_id):
+    """Get data points for a specific step."""
+    limit = request.args.get('limit', default=1000, type=int)
+    offset = request.args.get('offset', default=0, type=int)
+    
+    # Initialize database
+    db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
+    db = NH3SynthDatabase(db_path)
+    
+    # Get data points
+    data_points = db.get_step_data_points(step_id, limit, offset)
+    
+    return jsonify(data_points)
+
+@app.route('/api/database/experiments/<int:experiment_id>/steps/<int:step_id>/export/csv', methods=['GET'])
+def export_step_data_csv(experiment_id, step_id):
+    """Export step data points to CSV."""
+    # Initialize database
+    db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
+    db = NH3SynthDatabase(db_path)
+    
+    # Get experiment to use in filename
+    experiment = db.get_experiment_by_id(experiment_id)
+    if not experiment:
+        return jsonify({'error': 'Experiment not found'}), 404
+    
+    # Create exports folder if it doesn't exist
+    exports_folder = os.path.join(app.config['DATABASE_FOLDER'], 'exports')
+    if not os.path.exists(exports_folder):
+        os.makedirs(exports_folder)
+    
+    # Generate export filename
+    filename = f"{experiment['report_folder']}_step_{step_id}_data.csv"
+    export_path = os.path.join(exports_folder, filename)
+    
+    # Export data
+    success = db.export_step_data_to_csv(step_id, export_path)
+    
+    if success:
+        return jsonify({'success': True, 'file_path': export_path, 'filename': filename})
+    else:
+        return jsonify({'error': 'Failed to export data'}), 500
+
+@app.route('/api/database/experiments/<int:experiment_id>/steps/<int:step_id>/export/json', methods=['GET'])
+def export_step_data_json(experiment_id, step_id):
+    """Export step data points to JSON."""
+    # Initialize database
+    db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
+    db = NH3SynthDatabase(db_path)
+    
+    # Get experiment to use in filename
+    experiment = db.get_experiment_by_id(experiment_id)
+    if not experiment:
+        return jsonify({'error': 'Experiment not found'}), 404
+    
+    # Create exports folder if it doesn't exist
+    exports_folder = os.path.join(app.config['DATABASE_FOLDER'], 'exports')
+    if not os.path.exists(exports_folder):
+        os.makedirs(exports_folder)
+    
+    # Generate export filename
+    filename = f"{experiment['report_folder']}_step_{step_id}_data.json"
+    export_path = os.path.join(exports_folder, filename)
+    
+    # Export data
+    success = db.export_step_data_to_json(step_id, export_path)
+    
+    if success:
+        return jsonify({'success': True, 'file_path': export_path, 'filename': filename})
+    else:
+        return jsonify({'error': 'Failed to export data'}), 500
+
+@app.route('/api/database/experiments/<int:experiment_id>/steps/<int:step_id>/download/csv', methods=['GET'])
+def download_step_data_csv(experiment_id, step_id):
+    """Download step data points as CSV."""
+    # Initialize database
+    db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
+    db = NH3SynthDatabase(db_path)
+    
+    # Get experiment to use in filename
+    experiment = db.get_experiment_by_id(experiment_id)
+    if not experiment:
+        return jsonify({'error': 'Experiment not found'}), 404
+    
+    # Create temporary file
+    temp_file = os.path.join(tempfile.gettempdir(), f"{experiment['report_folder']}_step_{step_id}_data.csv")
+    
+    # Export data
+    success = db.export_step_data_to_csv(step_id, temp_file)
+    
+    if success:
+        return send_file(temp_file, as_attachment=True, download_name=f"{experiment['report_folder']}_step_{step_id}_data.csv")
+    else:
+        return jsonify({'error': 'Failed to export data'}), 500
+
+@app.route('/api/database/experiments/<int:experiment_id>/steps/<int:step_id>/download/json', methods=['GET'])
+def download_step_data_json(experiment_id, step_id):
+    """Download step data points as JSON."""
+    # Initialize database
+    db_path = os.path.join(app.config['DATABASE_FOLDER'], 'nh3_synth.db')
+    db = NH3SynthDatabase(db_path)
+    
+    # Get experiment to use in filename
+    experiment = db.get_experiment_by_id(experiment_id)
+    if not experiment:
+        return jsonify({'error': 'Experiment not found'}), 404
+    
+    # Create temporary file
+    temp_file = os.path.join(tempfile.gettempdir(), f"{experiment['report_folder']}_step_{step_id}_data.json")
+    
+    # Export data
+    success = db.export_step_data_to_json(step_id, temp_file)
+    
+    if success:
+        return send_file(temp_file, as_attachment=True, download_name=f"{experiment['report_folder']}_step_{step_id}_data.json")
+    else:
+        return jsonify({'error': 'Failed to export data'}), 500
 
 # --- Main Execution ---
 if __name__ == '__main__':

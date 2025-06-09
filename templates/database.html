@@ -1,0 +1,1261 @@
+{% extends "layout.html" %}
+
+{% block title %}Database Management - Skid NH3 Syn. Data Processor{% endblock %}
+
+{% block head %}
+<title>NH3 Synthesis Data Manager - Database</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-header">
+        <h1>NH3 Synthesis Database Management</h1>
+        <div class="header-actions">
+            <button id="generateDatabaseBtn" class="btn-primary">
+                <i class="fas fa-database"></i> Generate Database
+            </button>
+            <div class="dropdown">
+                <button class="btn-secondary dropdown-toggle">
+                    <i class="fas fa-download"></i> Export
+                </button>
+                <div class="dropdown-menu">
+                    <a href="/api/database/download/csv" class="dropdown-item">Export as CSV</a>
+                    <a href="/api/database/download/json" class="dropdown-item">Export as JSON</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="database-status-card card">
+        <div class="card-header">
+            <h3>Database Status</h3>
+        </div>
+        <div class="card-body">
+            <div id="databaseStats" class="database-stats">
+                <p>Click "Generate Database" to process all reports and create the database.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="experiments-list-container card">
+        <div class="card-header">
+            <h3>Experiments in Database</h3>
+            <div class="search-filter">
+                <input type="text" id="searchExperiments" class="search-input" placeholder="Search experiments...">
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="data-table experiments-table">
+                    <thead>
+                        <tr>
+                            <th>Report Folder</th>
+                            <th>Experiment ID</th>
+                            <th>Reactor ID</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="experimentsTableBody">
+                        <tr>
+                            <td colspan="6" class="loading-text">Loading experiments...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="reports-not-in-db card">
+        <div class="card-header">
+            <h3>Reports Not in Database</h3>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="data-table reports-table">
+                    <thead>
+                        <tr>
+                            <th>Report Name</th>
+                            <th>Created At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportsNotInDbTableBody">
+                        <tr>
+                            <td colspan="3" class="loading-text">Loading reports...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Experiment Details Modal -->
+    <div class="modal fade" id="experimentDetailsModal" tabindex="-1" aria-labelledby="experimentDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="experimentDetailsModalLabel">Experiment Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 id="experiment-folder-name"></h6>
+                        <span id="experiment-date-time" class="text-muted"></span>
+                    </div>
+                    
+                    <!-- Tabs Navigation -->
+                    <ul class="nav nav-tabs" id="experimentDetailsTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab" aria-controls="overview" aria-selected="true">Overview</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="steps-tab" data-bs-toggle="tab" data-bs-target="#steps" type="button" role="tab" aria-controls="steps" aria-selected="false">Steps</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="data-points-tab" data-bs-toggle="tab" data-bs-target="#data-points" type="button" role="tab" aria-controls="data-points" aria-selected="false">Data Points</button>
+                        </li>
+                    </ul>
+                    
+                    <!-- Tabs Content -->
+                    <div class="tab-content" id="experimentDetailsTabContent">
+                        <!-- Overview Tab -->
+                        <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Experiment Information</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <table class="table table-sm">
+                                                <tbody>
+                                                    <tr>
+                                                        <th>Report Folder</th>
+                                                        <td id="exp-report-folder"></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Experiment ID</th>
+                                                        <td id="exp-id"></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Reactor ID</th>
+                                                        <td id="exp-reactor-id"></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Date</th>
+                                                        <td id="exp-date"></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Time</th>
+                                                        <td id="exp-time"></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Total Steps</th>
+                                                        <td id="exp-total-steps"></td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <!-- Additional information or charts can go here -->
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Metadata</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="exp-metadata" class="metadata-display">
+                                                <!-- Metadata will be populated here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Steps Tab -->
+                        <div class="tab-pane fade" id="steps" role="tabpanel" aria-labelledby="steps-tab">
+                            <div class="table-responsive mt-3">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Step Number</th>
+                                            <th>Description</th>
+                                            <th>Data Points</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="experiment-steps-table">
+                                        <!-- Steps will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Data Points Tab -->
+                        <div class="tab-pane fade" id="data-points" role="tabpanel" aria-labelledby="data-points-tab">
+                            <div class="mt-3">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="step-select">Select Step:</label>
+                                            <select id="step-select" class="form-select">
+                                                <option value="">-- Select a step --</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="d-flex justify-content-end align-items-end h-100">
+                                            <div class="btn-group">
+                                                <button id="export-data-csv" class="btn btn-outline-secondary" disabled>Export CSV</button>
+                                                <button id="export-data-json" class="btn btn-outline-secondary" disabled>Export JSON</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div id="data-points-container">
+                                    <div id="data-points-loading" class="text-center d-none">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p>Loading data points...</p>
+                                    </div>
+                                    
+                                    <div id="data-points-chart-container" class="mb-4">
+                                        <canvas id="data-points-chart" style="width: 100%; height: 300px;"></canvas>
+                                    </div>
+                                    
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>Time</th>
+                                                    <th>Stage</th>
+                                                    <th>H2 Flow</th>
+                                                    <th>N2 Flow</th>
+                                                    <th>T Reactor</th>
+                                                    <th>Pressure</th>
+                                                    <th>NH3 GC</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="data-points-table">
+                                                <!-- Data points will be populated here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    
+                                    <div id="data-points-pagination" class="d-flex justify-content-between align-items-center mt-3">
+                                        <div>
+                                            <span id="data-points-showing">Showing 0 of 0</span>
+                                        </div>
+                                        <div>
+                                            <button id="data-points-prev" class="btn btn-sm btn-outline-secondary" disabled>Previous</button>
+                                            <button id="data-points-next" class="btn btn-sm btn-outline-secondary" disabled>Next</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Helper function to pretty print JSON
+function prettyPrintJSON(json) {
+    if (typeof json === 'string') {
+        try {
+            json = JSON.parse(json);
+        } catch (e) {
+            return `<pre>${json}</pre>`;
+        }
+    }
+    
+    const formatted = JSON.stringify(json, null, 2)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, 
+            function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            }
+        );
+    
+    return `<pre class="json-pretty">${formatted}</pre>`;
+}
+
+$(document).ready(function() {
+    // Initialize UI components
+    initDropdowns();
+    initTabs();
+    
+    // Add event listeners
+    $('#generateDatabaseBtn').on('click', generateDatabase);
+    $('#searchExperiments').on('input', filterExperiments);
+    
+    // Bootstrap modal functionality is handled automatically through data attributes
+    // So we don't need custom modal closing code
+    
+    // Load initial data
+    loadExperiments();
+    loadReportsNotInDatabase();
+    checkDatabaseStatus();
+});
+
+function initTabs() {
+    // Tab functionality
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab-btn').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Hide all tab panes
+            document.querySelectorAll('.tab-pane').forEach(pane => {
+                pane.classList.remove('active');
+            });
+            
+            // Add active class to clicked tab
+            this.classList.add('active');
+            
+            // Show corresponding tab pane
+            const tabId = this.getAttribute('data-tab');
+            document.getElementById(tabId).classList.add('active');
+        });
+    });
+}
+
+function initDropdowns() {
+    document.querySelectorAll('.dropdown-toggle').forEach(button => {
+        button.addEventListener('click', function() {
+            const menu = this.nextElementSibling;
+            menu.classList.toggle('show');
+            
+            // Close other dropdowns
+            document.querySelectorAll('.dropdown-menu.show').forEach(openMenu => {
+                if (openMenu !== menu) {
+                    openMenu.classList.remove('show');
+                }
+            });
+        });
+    });
+    
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', function(event) {
+        if (!event.target.matches('.dropdown-toggle')) {
+            document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                menu.classList.remove('show');
+            });
+        }
+    });
+}
+
+function generateDatabase() {
+    // Show modal with options
+    if (confirm('Do you want to regenerate the database? This may take a few minutes.')) {
+        // Ask if they want to recreate the schema (useful when the database model has changed)
+        const recreateSchema = confirm('Do you want to recreate the database schema? This will delete all existing data and recreate the tables. Choose this option if you encounter schema compatibility errors.');
+        
+        // Show loading state
+        $('#generateDatabaseBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...');
+        
+        // Make the API call
+        $.ajax({
+            url: '/api/database/generate',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ recreate: recreateSchema }),
+            success: function(response) {
+                if (response.success) {
+                    alert('Database generated successfully!');
+                    // Reload the experiments
+                    loadExperiments();
+                } else {
+                    alert('Error generating database: ' + (response.error || 'Unknown error'));
+                }
+                // Reset button
+                $('#generateDatabaseBtn').prop('disabled', false).html('<i class="fas fa-database"></i> Generate Database');
+            },
+            error: function(error) {
+                console.error('Error generating database:', error);
+                alert('Error generating database: ' + (error.responseJSON?.error || error.statusText || 'Unknown error'));
+                // Reset button
+                $('#generateDatabaseBtn').prop('disabled', false).html('<i class="fas fa-database"></i> Generate Database');
+            }
+        });
+    }
+}
+
+function checkDatabaseStatus() {
+    $.getJSON('/api/database/experiments', function(data) {
+        if (data.success) {
+            const experiments = data.experiments;
+            if (experiments && experiments.length > 0) {
+                // Database exists and has data
+                let statsHtml = `
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <h4>Total Experiments</h4>
+                            <p class="stat-value">${experiments.length}</p>
+                        </div>
+                        <div class="stat-item">
+                            <h4>Database Path</h4>
+                            <p>Database/nh3_synth.db</p>
+                        </div>
+                    </div>
+                    <div class="last-updated">
+                        <p>Last checked: ${new Date().toLocaleString()}</p>
+                    </div>
+                `;
+                
+                $('#databaseStats').html(statsHtml);
+            } else {
+                // Database exists but is empty
+                $('#databaseStats').html(`
+                    <p>Database exists but contains no experiments.</p>
+                    <p>Click "Generate Database" to process all reports.</p>
+                `);
+            }
+        } else {
+            // Error or database doesn't exist
+            $('#databaseStats').html(`
+                <p>Database status could not be determined.</p>
+                <p>Click "Generate Database" to create or update the database.</p>
+            `);
+        }
+    }).fail(function(error) {
+        console.error('Error checking database status:', error);
+        $('#databaseStats').html(`
+            <p>Database status could not be determined.</p>
+            <p>Click "Generate Database" to create or update the database.</p>
+        `);
+    });
+}
+
+function loadExperiments() {
+    $('#experimentsTableBody').html('<tr><td colspan="6" class="loading-text">Loading experiments...</td></tr>');
+    
+    $.getJSON('/api/database/experiments', function(data) {
+        if (data.success) {
+            const experiments = data.experiments;
+            
+            if (experiments && experiments.length > 0) {
+                $('#experimentsTableBody').empty();
+                
+                experiments.forEach(experiment => {
+                    const row = `
+                        <tr>
+                            <td>${experiment.report_folder || 'N/A'}</td>
+                            <td>${experiment.experiment_id || 'N/A'}</td>
+                            <td>${experiment.reactor_id || 'N/A'}</td>
+                            <td>${experiment.date || 'N/A'}</td>
+                            <td>${experiment.time || 'N/A'}</td>
+                            <td class="actions-cell">
+                                <button class="btn-icon view-experiment-btn" data-experiment="${experiment.id}" title="View Details">
+                                    <i class="fas fa-info-circle"></i>
+                                </button>
+                                <a href="/visualize?report=${encodeURIComponent(experiment.report_folder)}" class="btn-icon" title="Visualize">
+                                    <i class="fas fa-chart-line"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    `;
+                    
+                    $('#experimentsTableBody').append(row);
+                });
+                
+                // Add event listeners for view buttons
+                $('.view-experiment-btn').on('click', function() {
+                    const experimentId = $(this).data('experiment');
+                    loadExperimentDetails(experimentId);
+                });
+            } else {
+                $('#experimentsTableBody').html('<tr><td colspan="6" class="empty-text">No experiments found in database.</td></tr>');
+            }
+        } else {
+            $('#experimentsTableBody').html(`<tr><td colspan="6" class="error-text">Error: ${data.message || 'Failed to load experiments'}</td></tr>`);
+        }
+    }).fail(function(error) {
+        console.error('Error loading experiments:', error);
+        $('#experimentsTableBody').html(`<tr><td colspan="6" class="error-text">Error: ${error.statusText || 'Failed to connect to server'}</td></tr>`);
+    });
+}
+
+function loadReportsNotInDatabase() {
+    $('#reportsNotInDbTableBody').html('<tr><td colspan="3" class="loading-text">Checking for reports not in database...</td></tr>');
+    
+    // First, get all reports
+    $.getJSON('/api/reports', function(reportsData) {
+        if (!reportsData.success) {
+            $('#reportsNotInDbTableBody').html(`<tr><td colspan="3" class="error-text">Error: ${reportsData.message || 'Failed to load reports'}</td></tr>`);
+            return;
+        }
+        
+        // Then, get all experiments in database
+        $.getJSON('/api/database/experiments', function(experimentsData) {
+            if (!experimentsData.success) {
+                $('#reportsNotInDbTableBody').html(`<tr><td colspan="3" class="error-text">Error: ${experimentsData.message || 'Failed to load experiments'}</td></tr>`);
+                return;
+            }
+            
+            // Get folder names of experiments in database
+            const databaseFolders = new Set();
+            if (experimentsData.experiments) {
+                experimentsData.experiments.forEach(exp => {
+                    if (exp.report_folder) {
+                        databaseFolders.add(exp.report_folder);
+                    }
+                });
+            }
+            
+            // Filter reports not in database
+            const reportsNotInDb = reportsData.reports.filter(report => !databaseFolders.has(report.name));
+            
+            if (reportsNotInDb.length > 0) {
+                $('#reportsNotInDbTableBody').empty();
+                
+                reportsNotInDb.forEach(report => {
+                    const row = `
+                        <tr>
+                            <td>${report.name}</td>
+                            <td>${report.created_at || 'N/A'}</td>
+                            <td class="actions-cell">
+                                <button class="btn-primary btn-small add-to-db-btn" data-report="${report.name}">
+                                    Add to Database
+                                </button>
+                                <a href="/visualize?report=${encodeURIComponent(report.name)}" class="btn-icon" title="Preview">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    `;
+                    
+                    $('#reportsNotInDbTableBody').append(row);
+                });
+                
+                // Add event listeners for add buttons
+                $('.add-to-db-btn').on('click', function() {
+                    const reportName = $(this).data('report');
+                    addReportToDatabase(reportName, this);
+                });
+            } else {
+                $('#reportsNotInDbTableBody').html('<tr><td colspan="3" class="empty-text">All reports are already in the database.</td></tr>');
+            }
+        }).fail(function(error) {
+            console.error('Error loading experiments from database:', error);
+            $('#reportsNotInDbTableBody').html(`<tr><td colspan="3" class="error-text">Error: ${error.statusText || 'Failed to load experiments'}</td></tr>`);
+        });
+    }).fail(function(error) {
+        console.error('Error loading reports:', error);
+        $('#reportsNotInDbTableBody').html(`<tr><td colspan="3" class="error-text">Error: ${error.statusText || 'Failed to load reports'}</td></tr>`);
+    });
+}
+
+function addReportToDatabase(reportName, buttonElement) {
+    // Disable button and show loading
+    $(buttonElement).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Adding...');
+    
+    $.ajax({
+        url: `/api/database/add-to-database/${reportName}`,
+        method: 'POST',
+        contentType: 'application/json',
+        success: function(data) {
+            if (data.success) {
+                alert(`Added ${reportName} to database`);
+                
+                // Remove row from reports not in database
+                $(buttonElement).closest('tr').remove();
+                
+                // Reload experiments
+                loadExperiments();
+                
+                // If no more reports, show empty message
+                if ($('#reportsNotInDbTableBody tr').length === 0) {
+                    $('#reportsNotInDbTableBody').html('<tr><td colspan="3" class="empty-text">All reports are already in the database.</td></tr>');
+                }
+            } else {
+                alert('Error: ' + data.message);
+                $(buttonElement).prop('disabled', false).html('Add to Database');
+            }
+        },
+        error: function(error) {
+            console.error('Error adding report to database:', error);
+            alert('Error: ' + (error.responseJSON?.message || error.statusText || 'Failed to connect to server'));
+            $(buttonElement).prop('disabled', false).html('Add to Database');
+        }
+    });
+}
+
+function showExperimentDetails(experimentId) {
+    const modal = document.getElementById('experimentDetailsModal');
+    const title = document.getElementById('experimentDetailsTitle');
+    const detailsPane = document.getElementById('experimentDetailsPane');
+    const stepsPane = document.getElementById('experimentStepsPane');
+    
+    // Reset tabs to details tab
+    document.querySelectorAll('.tab-btn').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+    });
+    document.querySelector('.tab-btn[data-tab="details-tab"]').classList.add('active');
+    document.getElementById('details-tab').classList.add('active');
+    
+    // Show loading state
+    title.textContent = 'Experiment Details';
+    detailsPane.innerHTML = '<p class="loading-text">Loading experiment details...</p>';
+    stepsPane.innerHTML = '<p class="loading-text">Loading steps...</p>';
+    document.getElementById('stepSelect').innerHTML = '<option>Loading steps...</option>';
+    
+    // Show modal
+    modal.classList.add('show');
+    
+    // Load experiment details
+    fetch(`/api/database/experiment/${experimentId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const experiment = data.experiment;
+                title.textContent = `Experiment: ${experiment.report_folder}`;
+                
+                // Format details
+                let detailsHtml = `
+                    <div class="details-grid">
+                        <div class="detail-group">
+                            <h3>Basic Information</h3>
+                            <div class="detail-item">
+                                <span class="detail-label">Experiment Number:</span>
+                                <span class="detail-value">${experiment.experiment_number || 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Catalyst Batch:</span>
+                                <span class="detail-value">${experiment.catalyst_batch || 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Reactor Number:</span>
+                                <span class="detail-value">${experiment.reactor_number || 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Created At:</span>
+                                <span class="detail-value">${experiment.created_at ? new Date(experiment.created_at).toLocaleString() : 'N/A'}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="detail-group">
+                            <h3>Catalyst Details</h3>
+                            <div class="detail-item">
+                                <span class="detail-label">Weight:</span>
+                                <span class="detail-value">${experiment.catalyst_weight ? experiment.catalyst_weight + ' g' : 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Volume:</span>
+                                <span class="detail-value">${experiment.catalyst_volume ? experiment.catalyst_volume + ' ml' : 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Bed Length:</span>
+                                <span class="detail-value">${experiment.catalyst_bed_length ? experiment.catalyst_bed_length + ' mm' : 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">State:</span>
+                                <span class="detail-value">${experiment.catalyst_state || 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-notes">
+                        <h3>Notes</h3>
+                        <p>${experiment.catalyst_notes || 'No notes available.'}</p>
+                    </div>
+                `;
+                
+                // Add plot summary if available
+                if (experiment.plot_summary) {
+                    const summary = experiment.plot_summary;
+                    detailsHtml += `
+                        <div class="detail-group">
+                            <h3>Data Summary</h3>
+                            <div class="detail-item">
+                                <span class="detail-label">Data Points:</span>
+                                <span class="detail-value">${summary.num_data_points || 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">First Timestamp:</span>
+                                <span class="detail-value">${summary.first_timestamp || 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Last Timestamp:</span>
+                                <span class="detail-value">${summary.last_timestamp || 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Plot File Size:</span>
+                                <span class="detail-value">${(summary.plot_file_size / (1024*1024)).toFixed(2) + ' MB' || 'N/A'}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                detailsPane.innerHTML = detailsHtml;
+                
+                // Setup export buttons
+                const exportAllDataBtn = document.getElementById('exportAllDataBtn');
+                exportAllDataBtn.href = `/api/database/experiment/${experimentId}/export`;
+                
+                // Load steps next
+                loadExperimentSteps(experimentId);
+            } else {
+                detailsPane.innerHTML = `<p class="error-message">Error: ${data.message}</p>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading experiment details:', error);
+            detailsPane.innerHTML = `<p class="error-message">Error loading details: ${error.message}</p>`;
+        });
+}
+
+function loadExperimentSteps(experimentId) {
+    const stepsPane = document.getElementById('experimentStepsPane');
+    const stepSelect = document.getElementById('stepSelect');
+    
+    fetch(`/api/database/experiment/${experimentId}/steps`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const steps = data.steps;
+                
+                if (steps && steps.steps && Object.keys(steps.steps).length > 0) {
+                    let stepsHtml = `
+                        <div class="steps-table-container">
+                            <table class="data-table steps-table">
+                                <thead>
+                                    <tr>
+                                        <th>Step</th>
+                                        <th>Temperature (°C)</th>
+                                        <th>Pressure (bar)</th>
+                                        <th>H2 Flow</th>
+                                        <th>N2 Flow</th>
+                                        <th>Stage</th>
+                                        <th>Data Points</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+                    
+                    // Clear step select
+                    stepSelect.innerHTML = '';
+                    
+                    // Sort steps by number
+                    const stepNumbers = Object.keys(steps.steps).map(Number).sort((a, b) => a - b);
+                    
+                    // Add each step to the table and dropdown
+                    stepNumbers.forEach(stepNum => {
+                        const step = steps.steps[stepNum];
+                        
+                        // Add to table
+                        stepsHtml += `
+                            <tr>
+                                <td>${stepNum}</td>
+                                <td>${step['T Reactor (sliding TC)'] || 'N/A'}</td>
+                                <td>${step['Pressure reading'] || 'N/A'}</td>
+                                <td>${step['H2 Actual Flow'] || 'N/A'}</td>
+                                <td>${step['N2 Actual Flow'] || 'N/A'}</td>
+                                <td>${step['Stage'] || 'N/A'}</td>
+                                <td>${step['data_points_count'] || 'N/A'}</td>
+                                <td class="actions-cell">
+                                    <button class="btn-icon view-data-btn" data-step="${stepNum}" title="View Data">
+                                        <i class="fas fa-table"></i>
+                                    </button>
+                                    <a href="/api/database/experiment/${experimentId}/step/${stepNum}/export" class="btn-icon" title="Export Data">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        `;
+                        
+                        // Add to dropdown
+                        const option = document.createElement('option');
+                        option.value = stepNum;
+                        option.textContent = `Step ${stepNum} - ${step['Stage'] || 'Unknown Stage'}`;
+                        stepSelect.appendChild(option);
+                    });
+                    
+                    stepsHtml += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                    
+                    stepsPane.innerHTML = stepsHtml;
+                    
+                    // Add event listeners for view data buttons
+                    document.querySelectorAll('.view-data-btn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const stepNum = this.getAttribute('data-step');
+                            
+                            // Switch to data tab
+                            document.querySelector('.tab-btn[data-tab="data-tab"]').click();
+                            
+                            // Select the step in dropdown
+                            document.getElementById('stepSelect').value = stepNum;
+                            
+                            // Load data
+                            loadStepDataPoints(experimentId, stepNum);
+                        });
+                    });
+                    
+                    // Setup data tab events
+                    document.getElementById('loadDataPointsBtn').addEventListener('click', function() {
+                        const stepNum = document.getElementById('stepSelect').value;
+                        if (stepNum) {
+                            loadStepDataPoints(experimentId, stepNum);
+                        }
+                    });
+                    
+                    // Setup export step data button
+                    const exportStepDataBtn = document.getElementById('exportStepDataBtn');
+                    exportStepDataBtn.addEventListener('click', function() {
+                        const stepNum = document.getElementById('stepSelect').value;
+                        if (stepNum) {
+                            this.href = `/api/database/experiment/${experimentId}/step/${stepNum}/export`;
+                        } else {
+                            event.preventDefault();
+                            showNotification('Please select a step first', 'warning');
+                        }
+                    });
+                } else {
+                    stepsPane.innerHTML = '<p>No steps found for this experiment.</p>';
+                    stepSelect.innerHTML = '<option value="">No steps available</option>';
+                }
+            } else {
+                stepsPane.innerHTML = `<p class="error-message">Error: ${data.message}</p>`;
+                stepSelect.innerHTML = '<option value="">Error loading steps</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading experiment steps:', error);
+            stepsPane.innerHTML = `<p class="error-message">Error loading steps: ${error.message}</p>`;
+            stepSelect.innerHTML = '<option value="">Error loading steps</option>';
+        });
+}
+
+// Global variables
+let currentExperimentId = null;
+let currentStepId = null;
+let dataPointsChart = null;
+let currentOffset = 0;
+let currentLimit = 100;
+let totalDataPoints = 0;
+
+// Initialize the page
+$(document).ready(function() {
+    // Load experiments when the page loads
+    loadExperiments();
+    
+    // Set up event handlers
+    $('#generate-database-btn').click(generateDatabase);
+    $('#add-report-btn').click(addReportToDatabase);
+    $('#experimentDetailsModal').on('hidden.bs.modal', function() {
+        currentExperimentId = null;
+        if (dataPointsChart) {
+            dataPointsChart.destroy();
+            dataPointsChart = null;
+        }
+    });
+    
+    // Step selection for data points
+    $('#step-select').change(function() {
+        const stepId = $(this).val();
+        if (stepId) {
+            currentStepId = stepId;
+            currentOffset = 0; // Reset pagination
+            loadDataPoints(currentExperimentId, stepId, currentLimit, currentOffset);
+            $('#export-data-csv, #export-data-json').prop('disabled', false);
+        } else {
+            currentStepId = null;
+            $('#data-points-table').empty();
+            $('#export-data-csv, #export-data-json').prop('disabled', true);
+            if (dataPointsChart) {
+                dataPointsChart.destroy();
+                dataPointsChart = null;
+            }
+        }
+    });
+    
+    // Pagination buttons
+    $('#data-points-prev').click(function() {
+        if (currentOffset - currentLimit >= 0) {
+            currentOffset -= currentLimit;
+            loadDataPoints(currentExperimentId, currentStepId, currentLimit, currentOffset);
+        }
+    });
+    
+    $('#data-points-next').click(function() {
+        if (currentOffset + currentLimit < totalDataPoints) {
+            currentOffset += currentLimit;
+            loadDataPoints(currentExperimentId, currentStepId, currentLimit, currentOffset);
+        }
+    });
+    
+    // Export buttons
+    $('#export-data-csv').click(function() {
+        if (currentExperimentId && currentStepId) {
+            window.location.href = `/api/database/experiments/${currentExperimentId}/steps/${currentStepId}/download/csv`;
+        }
+    });
+    
+    $('#export-data-json').click(function() {
+        if (currentExperimentId && currentStepId) {
+            window.location.href = `/api/database/experiments/${currentExperimentId}/steps/${currentStepId}/download/json`;
+        }
+    });
+});
+
+// Function to load data points for a specific step
+function loadDataPoints(experimentId, stepId, limit, offset) {
+    // Show loading spinner
+    $('#data-points-loading').removeClass('d-none');
+    $('#data-points-table').empty();
+    
+    // Fetch data points from API
+    $.ajax({
+        url: `/api/database/experiments/${experimentId}/steps/${stepId}/datapoints`,
+        method: 'GET',
+        data: { limit: limit, offset: offset },
+        success: function(response) {
+            // Hide loading spinner
+            $('#data-points-loading').addClass('d-none');
+            
+            // Update pagination info
+            totalDataPoints = response.total_count;
+            updatePaginationControls(offset, limit, totalDataPoints);
+            
+            // Display data points in table
+            const dataPoints = response.data_points;
+            if (dataPoints.length === 0) {
+                $('#data-points-table').html('<tr><td colspan="7" class="text-center">No data points available</td></tr>');
+                return;
+            }
+            
+            // Populate table
+            dataPoints.forEach(point => {
+                $('#data-points-table').append(`
+                    <tr>
+                        <td>${point.relative_time.toFixed(2)}</td>
+                        <td>${point.stage}</td>
+                        <td>${point.h2_actual_flow?.toFixed(2) || 'N/A'}</td>
+                        <td>${point.n2_actual_flow?.toFixed(2) || 'N/A'}</td>
+                        <td>${point.t_reactor?.toFixed(2) || 'N/A'}</td>
+                        <td>${point.pressure_reading?.toFixed(2) || 'N/A'}</td>
+                        <td>${point.nh3_clean_gc?.toFixed(6) || 'N/A'}</td>
+                    </tr>
+                `);
+            });
+            
+            // Create or update chart
+            createDataPointsChart(dataPoints);
+        },
+        error: function(error) {
+            console.error('Error loading data points:', error);
+            $('#data-points-loading').addClass('d-none');
+            $('#data-points-table').html('<tr><td colspan="7" class="text-center text-danger">Error loading data points</td></tr>');
+        }
+    });
+}
+
+// Function to update pagination controls
+function updatePaginationControls(offset, limit, total) {
+    const showing = Math.min(offset + limit, total);
+    $('#data-points-showing').text(`Showing ${offset + 1} - ${showing} of ${total}`);
+    
+    // Enable/disable prev/next buttons
+    $('#data-points-prev').prop('disabled', offset <= 0);
+    $('#data-points-next').prop('disabled', offset + limit >= total);
+}
+
+// Function to create or update the data points chart
+function createDataPointsChart(dataPoints) {
+    const ctx = document.getElementById('data-points-chart').getContext('2d');
+    
+    // Prepare data for the chart
+    const labels = dataPoints.map(point => point.relative_time.toFixed(2));
+    const h2Flow = dataPoints.map(point => point.h2_actual_flow);
+    const n2Flow = dataPoints.map(point => point.n2_actual_flow);
+    const temperature = dataPoints.map(point => point.t_reactor);
+    const pressure = dataPoints.map(point => point.pressure_reading);
+    const nh3GC = dataPoints.map(point => point.nh3_clean_gc);
+    
+    // Destroy existing chart if any
+    if (dataPointsChart) {
+        dataPointsChart.destroy();
+    }
+    
+    // Create new chart
+    dataPointsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'H2 Flow',
+                    data: h2Flow,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    tension: 0.1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'N2 Flow',
+                    data: n2Flow,
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    tension: 0.1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Temperature',
+                    data: temperature,
+                    borderColor: 'rgba(255, 159, 64, 1)',
+                    backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                    tension: 0.1,
+                    yAxisID: 'y1'
+                },
+                {
+                    label: 'Pressure',
+                    data: pressure,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1,
+                    yAxisID: 'y2'
+                },
+                {
+                    label: 'NH3 GC',
+                    data: nh3GC,
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                    tension: 0.1,
+                    yAxisID: 'y3'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Relative Time'
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Flow Rate'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Temperature (°C)'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                },
+                y2: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Pressure'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                },
+                y3: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'NH3 GC'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+function filterExperiments() {
+    const searchText = $('#searchExperiments').val().toLowerCase();
+    
+    $('#experimentsTableBody tr').each(function() {
+        const text = $(this).text().toLowerCase();
+        $(this).toggle(text.includes(searchText));
+    });
+}
+
+function formatFileSize(bytes) {
+    if (bytes === undefined || bytes === null) return 'N/A';
+    
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function showNotification(message, type = 'info') {
+    // Check if notification container exists
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        document.body.appendChild(container);
+    }
+    
+    // Create notification
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = message;
+    
+    // Add to container
+    container.appendChild(notification);
+    
+    // Set timeout to remove notification
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+            container.removeChild(notification);
+        }, 300);
+    }, 5000);
+}
+
+// Function to load experiment details
+function loadExperimentDetails(experimentId) {
+    // Store current experiment ID
+    currentExperimentId = experimentId;
+    
+    // Clear previous data
+    $('#experiment-steps-table').empty();
+    $('#step-select').empty().append('<option value="">-- Select a step --</option>');
+    $('#data-points-table').empty();
+    $('#export-data-csv, #export-data-json').prop('disabled', true);
+    if (dataPointsChart) {
+        dataPointsChart.destroy();
+        dataPointsChart = null;
+    }
+    
+    // Show modal
+    $('#experimentDetailsModal').modal('show');
+    
+    // Fetch experiment details
+    $.getJSON(`/api/database/experiment/${experimentId}`, function(data) {
+        if (!data.success) {
+            alert('Error loading experiment details: ' + data.message);
+            return;
+        }
+        
+        const experiment = data.experiment;
+        
+        // Set modal title and header info
+        $('#experimentDetailsModalLabel').text(`Experiment ${experiment.experiment_id}`);
+        $('#experiment-folder-name').text(experiment.report_folder);
+        $('#experiment-date-time').text(`${experiment.date} ${experiment.time}`);
+        
+        // Fill in basic experiment information
+        $('#exp-report-folder').text(experiment.report_folder);
+        $('#exp-id').text(experiment.experiment_id);
+        $('#exp-reactor-id').text(experiment.reactor_id);
+        $('#exp-date').text(experiment.date);
+        $('#exp-time').text(experiment.time);
+        $('#exp-total-steps').text(experiment.steps.length);
+        
+        // Display metadata
+        if (experiment.metadata && Object.keys(experiment.metadata).length > 0) {
+            $('#exp-metadata').html(prettyPrintJSON(experiment.metadata));
+        } else {
+            $('#exp-metadata').html('<em>No metadata available</em>');
+        }
+        
+        // Populate steps table
+        if (experiment.steps && experiment.steps.length > 0) {
+            experiment.steps.forEach(step => {
+                $('#experiment-steps-table').append(`
+                    <tr>
+                        <td>${step.step_number}</td>
+                        <td>${step.stage || `Step ${step.step_number}`}</td>
+                        <td>${step.data_points_count}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary view-step-data" data-step-id="${step.id}">
+                                View Data
+                            </button>
+                        </td>
+                    </tr>
+                `);
+                
+                // Add option to step select dropdown
+                $('#step-select').append(`<option value="${step.id}">Step ${step.step_number} (${step.data_points_count} points)</option>`);
+            });
+            
+            // Add event listener for view data buttons
+            $('.view-step-data').click(function() {
+                const stepId = $(this).data('step-id');
+                // Select the corresponding step in the dropdown
+                $('#step-select').val(stepId).trigger('change');
+                // Switch to the data points tab
+                $('#data-points-tab').tab('show');
+            });
+        } else {
+            $('#experiment-steps-table').html('<tr><td colspan="4" class="text-center">No steps available</td></tr>');
+        }
+    }).fail(function(error) {
+        console.error('Error loading experiment details:', error);
+        alert('Error loading experiment details');
+    });
+}
+</script>
+{% endblock %} 

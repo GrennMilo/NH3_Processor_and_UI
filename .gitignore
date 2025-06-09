@@ -1,7 +1,10 @@
-# Python bytecode files
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
+*.so
 
 # Distribution / packaging
 dist/
@@ -19,24 +22,33 @@ ENV/
 *.swp
 *.swo
 
+# Database files
+Database/*.db
+*.db
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local development settings
+.env
+
+# Temporary files
+tmp/
+temp/
+
 # Data and generated files
 /uploads/*
 !/uploads/.gitkeep
 /static/reports/*
 !/static/reports/.gitkeep
 
-# OS specific files
-.DS_Store
-Thumbs.db
-.directory
-
 # Environment variables
-.env
 .env.*
 !.env.example
 
 # Jupyter Notebooks
-.ipynb_checkpoints
-
-# Logs
-*.log 
+.ipynb_checkpoints 

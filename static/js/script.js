@@ -174,30 +174,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Theme Management Functions ---
     function applyInitialTheme() {
-        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        if (savedTheme === 'light') {
-            document.body.classList.add('light-theme');
-            themeSwitcherButton.textContent = '☀️';
-        } else {
-            document.body.classList.remove('light-theme');
-            themeSwitcherButton.textContent = '🌙';
-        }
+        // No need to duplicate theme initialization here
+        // This is now handled by initThemeSwitcher in common.js
     }
 
     function handleThemeSwitch() {
-        document.body.classList.toggle('light-theme');
+        // Toggle theme class and update UI
         if (document.body.classList.contains('light-theme')) {
-            localStorage.setItem('theme', 'light');
-            themeSwitcherButton.textContent = '☀️';
-        } else {
+            document.body.classList.replace('light-theme', 'dark-theme');
             localStorage.setItem('theme', 'dark');
             themeSwitcherButton.textContent = '🌙';
+        } else {
+            document.body.classList.replace('dark-theme', 'light-theme');
+            localStorage.setItem('theme', 'light');
+            themeSwitcherButton.textContent = '☀️';
         }
+        
         // Re-render visible plots with the new theme
         updateVisiblePlotsTheme();
     }
 
+    // This function is now provided by common.js, keeping a reference for backward compatibility
     function getCurrentThemeColors() {
+        // Use the common implementation if available
+        if (typeof window.getCurrentThemeColors === 'function') {
+            return window.getCurrentThemeColors();
+        }
+        
+        // Fallback implementation
         const isLightTheme = document.body.classList.contains('light-theme');
         if (isLightTheme) {
             return {
@@ -212,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 legend_font_color: '#212529'
             };
         } else {
-            // Dark theme (current defaults from script.js)
+            // Dark theme
             return {
                 paper_bgcolor: '#2c2c2c',
                 plot_bgcolor: '#383838',
@@ -510,65 +514,24 @@ document.addEventListener('DOMContentLoaded', () => {
          }
     }
 
-    // Helper function to fetch and render Plotly JSON
+        // Helper function to fetch and render Plotly JSON
     function fetchAndRenderPlotly(plotJsonPath, targetDivElement) {
-        targetDivElement.innerHTML = 'Loading plot...'; 
+        targetDivElement.innerHTML = '<div class="loading-plot">Loading plot...</div>'; 
         fetch('/' + plotJsonPath)
             .then(response => {
                 if (!response.ok) throw new Error(`Failed to fetch plot data: ${response.status} ${response.statusText} for ${plotJsonPath}`);
                 return response.json();
             })
             .then(plotData => {
-                const themeColors = getCurrentThemeColors();
-
-                if (!plotData.layout) plotData.layout = {};
-                plotData.layout.paper_bgcolor = themeColors.paper_bgcolor;
-                plotData.layout.plot_bgcolor = themeColors.plot_bgcolor;
-                plotData.layout.font = { color: themeColors.font_color }; 
-                
-                for (const key in plotData.layout) {
-                     if (key.startsWith('xaxis') || key.startsWith('yaxis')) {
-                         if(!plotData.layout[key]) plotData.layout[key] = {};
-                         plotData.layout[key].gridcolor = themeColors.gridcolor;
-                         plotData.layout[key].linecolor = themeColors.linecolor; 
-                         plotData.layout[key].zerolinecolor = themeColors.zerolinecolor;
-                         // Preserve title and tick font colors for specific axes if they were intentionally set (e.g. red for Temp)
-                         // This requires checking if the specific axis font color was set in the original plot JSON
-                         // For now, we apply the global theme font color to axis titles and ticks unless it's yaxis5
-                         if (plotData.layout[key].title && plotData.layout[key].title.font) {
-                            // Dont override if specific color was set, unless it is yaxis5 (stage)
-                            if (!plotData.layout[key].title.font.color || key === 'yaxis5') {
-                                plotData.layout[key].title.font.color = themeColors.font_color;
-                            }
-                         } else if (plotData.layout[key].title) {
-                            plotData.layout[key].title.font = { color: themeColors.font_color };
-                         }
-                         if (plotData.layout[key].tickfont) {
-                            if (!plotData.layout[key].tickfont.color || key === 'yaxis5') {
-                                plotData.layout[key].tickfont.color = themeColors.font_color;
-                            }
-                         } else {
-                            plotData.layout[key].tickfont = { color: themeColors.font_color };
-                         }
-                     }
-                }
-                if (plotData.layout.legend) {
-                    if(!plotData.layout.legend) plotData.layout.legend = {};
-                    plotData.layout.legend.font = { color: themeColors.font_color };
+                // Save original data with current plot path for later use
+                if (targetDivElement) {
+                    targetDivElement.dataset.currentPlotPath = plotJsonPath;
                 }
                 
-                // Apply dark theme to annotation text
-                if (plotData.layout.annotations && Array.isArray(plotData.layout.annotations)) {
-                    plotData.layout.annotations.forEach(annotation => {
-                        if (!annotation.font) annotation.font = {};
-                        annotation.font.color = themeColors.font_color;
-                    });
-                }
-
                 Plotly.newPlot(
                     targetDivElement, 
                     plotData.data, 
-                    plotData.layout,
+                    plotData.layout || {},
                     {
                         responsive: true,
                         displayModeBar: true,
@@ -577,16 +540,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 );
                 
-                // Apply our enhanced layout after rendering to improve axis positioning and scaling
+                // Apply our enhanced layout after rendering, which handles theme colors
                 if (typeof enhancePlotlyLayout === 'function') {
                     enhancePlotlyLayout(targetDivElement);
                 }
-                
             })
             .catch(error => {
                 console.error('Error fetching or rendering Plotly plot:', error);
                 targetDivElement.innerHTML = `
-                    <div class="alert alert-danger">
+                    <div class="error-message">
                         Failed to load plot: ${error.message}
                     </div>
                 `;

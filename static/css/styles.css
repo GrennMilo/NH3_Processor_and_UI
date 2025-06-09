@@ -41,7 +41,7 @@ details {
 
 details summary {
     cursor: pointer;
-    color: var(--primary-color);
+    color: var(--accent-primary);
     font-weight: 500;
     padding: 4px 0;
 }

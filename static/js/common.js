@@ -102,9 +102,11 @@ function initThemeSwitcher() {
     
     if (savedTheme === 'light' || (!savedTheme && !prefersDarkScheme.matches)) {
         document.body.classList.add('light-theme');
+        document.body.classList.remove('dark-theme');
         themeSwitcher.innerHTML = '<i class="fas fa-moon"></i>';
     } else {
         document.body.classList.add('dark-theme');
+        document.body.classList.remove('light-theme');
         themeSwitcher.innerHTML = '<i class="fas fa-sun"></i>';
     }
     
@@ -138,6 +140,32 @@ function updatePlotsForThemeChange() {
             enhancePlotlyLayout(container);
         }
     });
+    
+    // Trigger any additional update functions defined in other scripts
+    if (typeof updateVisiblePlotsTheme === 'function') {
+        updateVisiblePlotsTheme();
+    }
+}
+
+/**
+ * Get current theme colors for plots and UI elements
+ * @returns {Object} Object containing theme color values
+ */
+function getCurrentThemeColors() {
+    const isLightTheme = document.body.classList.contains('light-theme');
+    
+    const style = getComputedStyle(document.documentElement);
+    
+    return {
+        paper_bgcolor: style.getPropertyValue('--chart-paper-bgcolor').trim(),
+        plot_bgcolor: style.getPropertyValue('--chart-plot-bgcolor').trim(),
+        font_color: style.getPropertyValue('--chart-font-color').trim(),
+        gridcolor: style.getPropertyValue('--chart-gridcolor').trim(),
+        linecolor: style.getPropertyValue('--chart-linecolor').trim(),
+        zerolinecolor: style.getPropertyValue('--chart-zerolinecolor').trim(),
+        legend_bgcolor: isLightTheme ? '#ffffff' : '#383838',
+        legend_bordercolor: isLightTheme ? '#ced4da' : '#4a4a4a'
+    };
 }
 
 /**
@@ -255,6 +283,14 @@ function enhancePlotlyLayout(plotlyDiv) {
     
     const layout = plotlyDiv.layout;
     
+    // Get theme colors
+    const themeColors = getCurrentThemeColors();
+    
+    // Apply theme colors to the plot
+    layout.paper_bgcolor = themeColors.paper_bgcolor;
+    layout.plot_bgcolor = themeColors.plot_bgcolor;
+    layout.font = { color: themeColors.font_color };
+    
     // Clear title text to prevent overlap with Plotly title and provide more space
     if (layout.title && typeof layout.title === 'object' && layout.title.text) {
         // Store original title in a data attribute for reference if needed
@@ -268,6 +304,9 @@ function enhancePlotlyLayout(plotlyDiv) {
     // Ensure proper spacing for axes - expand the domain to use more space on the right
     if (layout.xaxis) {
         layout.xaxis.domain = [0.10, 0.92]; // Extend plot area to use more space on the right
+        layout.xaxis.gridcolor = themeColors.gridcolor;
+        layout.xaxis.linecolor = themeColors.linecolor;
+        layout.xaxis.zerolinecolor = themeColors.zerolinecolor;
     }
     
     // Ensure all axes have proper positioning - adjust position values to match the new xaxis domain
@@ -284,10 +323,27 @@ function enhancePlotlyLayout(plotlyDiv) {
         if (layout[axisName]) {
             layout[axisName].position = position.position;
             layout[axisName].side = position.side;
+            layout[axisName].gridcolor = themeColors.gridcolor;
+            layout[axisName].linecolor = themeColors.linecolor;
+            layout[axisName].zerolinecolor = themeColors.zerolinecolor;
+            
             if (!layout[axisName].title) {
                 layout[axisName].title = {};
             }
             layout[axisName].title.standoff = position.title.standoff;
+            
+            // Apply font color to axis title and ticks
+            if (layout[axisName].title) {
+                if (!layout[axisName].title.font) {
+                    layout[axisName].title.font = {};
+                }
+                layout[axisName].title.font.color = themeColors.font_color;
+            }
+            
+            if (!layout[axisName].tickfont) {
+                layout[axisName].tickfont = {};
+            }
+            layout[axisName].tickfont.color = themeColors.font_color;
             
             // Only set fixed ranges for concentration axis (yaxis4) if autorange is not already true
             if (axisName === 'yaxis4' && layout[axisName].autorange !== true) {
@@ -322,6 +378,22 @@ function enhancePlotlyLayout(plotlyDiv) {
         if (Object.keys(updates).length > 0) {
             Object.assign(layout, updates);
         }
+    }
+    
+    // Apply theme to legend if it exists
+    if (layout.legend) {
+        if (!layout.legend.font) layout.legend.font = {};
+        layout.legend.font.color = themeColors.font_color;
+        layout.legend.bgcolor = themeColors.legend_bgcolor;
+        layout.legend.bordercolor = themeColors.legend_bordercolor;
+    }
+    
+    // Apply theme to annotations if they exist
+    if (layout.annotations && Array.isArray(layout.annotations)) {
+        layout.annotations.forEach(annotation => {
+            if (!annotation.font) annotation.font = {};
+            annotation.font.color = themeColors.font_color;
+        });
     }
     
     // Increase margins - reduce right margin to make better use of space
@@ -414,4 +486,62 @@ function addValueIndicator(cell, value, maxValue) {
     indicator.style.width = `${percentage}%`;
     
     cell.appendChild(indicator);
-} 
+}
+
+/**
+ * Test theme switching functionality by applying theme CSS classes to the body
+ * This function is useful for debugging theme issues
+ */
+function testThemeSwitching() {
+    console.log('Testing theme switching...');
+    
+    // Print current theme
+    const currentTheme = document.body.classList.contains('light-theme') ? 'light' : 'dark';
+    console.log('Current theme:', currentTheme);
+    
+    // Get CSS variables for current theme
+    const style = getComputedStyle(document.documentElement);
+    console.log('Theme variables:');
+    console.log('--bg-primary:', style.getPropertyValue('--bg-primary'));
+    console.log('--bg-secondary:', style.getPropertyValue('--bg-secondary'));
+    console.log('--bg-tertiary:', style.getPropertyValue('--bg-tertiary'));
+    console.log('--text-primary:', style.getPropertyValue('--text-primary'));
+    console.log('--bg-light:', style.getPropertyValue('--bg-light'));
+    console.log('--chart-paper-bgcolor:', style.getPropertyValue('--chart-paper-bgcolor'));
+    
+    // Test theme switching
+    if (document.body.classList.contains('light-theme')) {
+        console.log('Switching to dark theme...');
+        document.body.classList.replace('light-theme', 'dark-theme');
+        localStorage.setItem('theme', 'dark');
+    } else {
+        console.log('Switching to light theme...');
+        document.body.classList.replace('dark-theme', 'light-theme');
+        localStorage.setItem('theme', 'light');
+    }
+    
+    // Print updated CSS variables after theme switch
+    setTimeout(() => {
+        const newStyle = getComputedStyle(document.documentElement);
+        console.log('Updated theme variables:');
+        console.log('--bg-primary:', newStyle.getPropertyValue('--bg-primary'));
+        console.log('--bg-secondary:', newStyle.getPropertyValue('--bg-secondary'));
+        console.log('--bg-tertiary:', newStyle.getPropertyValue('--bg-tertiary'));
+        console.log('--text-primary:', newStyle.getPropertyValue('--text-primary'));
+        console.log('--bg-light:', newStyle.getPropertyValue('--bg-light'));
+        console.log('--chart-paper-bgcolor:', newStyle.getPropertyValue('--chart-paper-bgcolor'));
+        
+        // Switch back to original theme (optional)
+        if (currentTheme === 'light') {
+            document.body.classList.replace('dark-theme', 'light-theme');
+            localStorage.setItem('theme', 'light');
+        } else {
+            document.body.classList.replace('light-theme', 'dark-theme');
+            localStorage.setItem('theme', 'dark');
+        }
+        console.log('Reverted back to', currentTheme, 'theme');
+    }, 500);
+}
+
+// Uncomment to run the test
+// document.addEventListener('DOMContentLoaded', () => setTimeout(testThemeSwitching, 2000)); 
