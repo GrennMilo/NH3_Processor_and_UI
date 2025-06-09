@@ -25,7 +25,7 @@
     </div>
     
     <!-- Overall Report Section (initially hidden) -->
-    <div id="overall-report-section" class="visualization-section" style="display: none;">
+    <div id="overall-report-section" class="visualization-section">
         <div class="section-header">
             <h3>Overall Analysis</h3>
             <div class="actions">
@@ -38,7 +38,7 @@
     </div>
     
     <!-- Stages Section (initially hidden) -->
-    <div id="stages-section" class="visualization-section" style="display: none;">
+    <div id="stages-section" class="visualization-section">
         <div class="section-header">
             <h3>Stage Analysis</h3>
         </div>
@@ -64,7 +64,7 @@
         <div id="stage-content" class="stage-content">
             <div class="empty-stage-message">Select a stage to view its plot</div>
         </div>
-        <div id="comparison-plot-container" class="comparison-plot-container" style="display: none;">
+        <div id="comparison-plot-container" class="comparison-plot-container">
             <div class="section-header">
                 <h3>Stage Comparison</h3>
             </div>
@@ -75,7 +75,7 @@
     </div>
     
     <!-- Cross-Report Comparison Section (initially hidden) -->
-    <div id="cross-report-section" class="visualization-section" style="display: none;">
+    <div id="cross-report-section" class="visualization-section">
         <div class="section-header">
             <h3>Cross-Report Comparison</h3>
         </div>
@@ -99,14 +99,14 @@
                     <button id="generate-cross-comparison-button" class="btn-primary">
                         <i class="fas fa-chart-line"></i> Generate Cross-Comparison
                     </button>
-                    <button id="download-cross-comparison-csv-button" class="btn-secondary" style="display: none;">
+                    <button id="download-cross-comparison-csv-button" class="btn-secondary">
                         <i class="fas fa-download"></i> Download Visible Data
                     </button>
                 </div>
             </div>
         </div>
         <div id="cross-comparison-status-message" class="status-message"></div>
-        <div id="cross-comparison-plot-container" class="plot-container" style="display: none;">
+        <div id="cross-comparison-plot-container" class="plot-container">
             <!-- Cross-comparison plot will be inserted here -->
         </div>
     </div>
@@ -221,7 +221,7 @@ function loadSelectedReport() {
 
 function displayReportData(data) {
     // Hide empty state
-    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('empty-state').classList.add('initially-hidden');
     
     // Display timestamp in header
     document.getElementById('visualization-container').innerHTML = `
@@ -240,31 +240,31 @@ function displayReportData(data) {
         const csvLink = document.getElementById('overall-csv-link');
         if (data.overall_csv_path) {
             csvLink.href = `/${data.overall_csv_path}`;
-            csvLink.style.display = 'inline-block';
+            csvLink.classList.add('show-inline');
         } else {
-            csvLink.style.display = 'none';
+            csvLink.classList.remove('show-inline');
         }
         
         // Load the plot
         const plotContainer = document.getElementById('overall-plot-container');
         loadPlotlyJSON(data.overall_plot_path, plotContainer);
         
-        overallSection.style.display = 'block';
+        overallSection.classList.add('show');
     } else {
-        overallSection.style.display = 'none';
+        overallSection.classList.remove('show');
     }
     
     // Show stages section if available
     const stagesSection = document.getElementById('stages-section');
     if (data.step_reports && data.step_reports.length > 0) {
         populateStageButtons(data.step_reports);
-        stagesSection.style.display = 'block';
+        stagesSection.classList.add('show');
     } else {
-        stagesSection.style.display = 'none';
+        stagesSection.classList.remove('show');
     }
     
     // Show cross-report section
-    document.getElementById('cross-report-section').style.display = 'block';
+    document.getElementById('cross-report-section').classList.add('show');
     
     // Load available comparison plots
     loadAvailableComparisonPlots();
@@ -309,6 +309,16 @@ function loadPlotlyJSON(jsonPath, container) {
                         shape.line.color = stageLineColor;
                     }
                 });
+            }
+            
+            // Apply current theme colors
+            if (typeof getCurrentThemeColors === 'function') {
+                const themeColors = getCurrentThemeColors();
+                
+                if (!plotData.layout) plotData.layout = {};
+                plotData.layout.paper_bgcolor = themeColors.paper_bgcolor;
+                plotData.layout.plot_bgcolor = themeColors.plot_bgcolor;
+                plotData.layout.font = { color: themeColors.font_color };
             }
             
             // Adjust height for cross-comparison plots
@@ -718,9 +728,9 @@ function showNotification(message, type = 'info') {
 }
 
 .btn-control {
-    background-color: #272c36;
-    color: #e1e3e8;
-    border: 1px solid #495057;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 5px 10px;
     font-size: 12px;
@@ -729,8 +739,8 @@ function showNotification(message, type = 'info') {
 }
 
 .btn-control:hover {
-    background-color: #3a3f4b;
-    border-color: #6c757d;
+    background-color: var(--bg-hover);
+    border-color: var(--border-color);
 }
 
 .btn-control i {
@@ -773,16 +783,6 @@ function showNotification(message, type = 'info') {
     min-height: 800px; /* Increased height for cross-comparison plots */
 }
 
-/* Light theme overrides */
-body.light-theme .btn-control {
-    background-color: #f8f9fa;
-    color: #343a40;
-    border-color: #ced4da;
-}
-
-body.light-theme .btn-control:hover {
-    background-color: #e9ecef;
-    border-color: #adb5bd;
-}
+/* No need for light theme overrides as we're using CSS variables */
 </style>
 {% endblock %} 

@@ -31,7 +31,7 @@
                     </div>
                 </div>
                 
-                <div id="existing-report-selection" style="display: none;">
+                <div id="existing-report-selection">
                     <div class="form-group">
                         <label for="existing_report">
                             <i class="fas fa-folder-open"></i> Select Existing Report <span class="required">*</span>
@@ -198,7 +198,7 @@
                     </div>
                     
                     <!-- Uniform Grid Options -->
-                    <div class="option-container" id="uniform_grid_container" style="margin-top: 10px; display: none;">
+                    <div class="option-container margin-top-10" id="uniform_grid_container">
                         <div class="checkbox-container">
                             <input type="checkbox" id="use_uniform_grid" name="use_uniform_grid" value="true" checked>
                             <label for="use_uniform_grid">Use Uniform Time Grid</label>
@@ -543,7 +543,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     useInterpolationCheckbox.addEventListener('change', function() {
         interpolationKindSelect.disabled = !this.checked;
-        uniformGridContainer.style.display = this.checked ? 'block' : 'none';
+        if (this.checked) {
+            uniformGridContainer.classList.add('show');
+        } else {
+            uniformGridContainer.classList.remove('show');
         // If interpolation is disabled, also disable uniform grid options
         if (!this.checked) {
             useUniformGridCheckbox.checked = false;
@@ -600,7 +603,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Reset validation messages
         uploadStatusMessage.textContent = '';
-        uploadStatusCard.style.display = 'none';
+        uploadStatusCard.classList.remove('show');
         
         // Remove any previous error classes
         document.querySelectorAll('.error').forEach(el => {
@@ -665,7 +668,7 @@ document.addEventListener('DOMContentLoaded', function() {
             uploadStatusCard.classList.remove('success');
             uploadStatusCard.classList.add('error');
             uploadStatusMessage.textContent = errorMessage;
-            uploadStatusCard.style.display = 'block';
+            uploadStatusCard.classList.add('show');
         }
         
         return valid;
@@ -675,10 +678,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const notification = document.getElementById('notification');
         notification.textContent = message;
         notification.className = `notification ${type}`;
-        notification.style.display = 'block';
+        notification.classList.add('show');
         
         setTimeout(() => {
-            notification.style.display = 'none';
+            notification.classList.remove('show');
         }, 5000);
     }
     
@@ -716,15 +719,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 resultLinksContainer.appendChild(csvLink);
             }
             
-            resultLinksContainer.style.display = 'block';
+            resultLinksContainer.classList.add('show');
         } else {
             uploadStatusCard.classList.remove('success');
             uploadStatusCard.classList.add('error');
             uploadStatusMessage.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${data.message}`;
-            resultLinksContainer.style.display = 'none';
+            resultLinksContainer.classList.remove('show');
         }
         
-        uploadStatusCard.style.display = 'block';
+        uploadStatusCard.classList.add('show');
     }
 });
 </script>

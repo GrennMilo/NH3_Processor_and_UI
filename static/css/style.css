@@ -2253,3 +2253,36 @@ label.form-check-label {
 .modal-body h1, .modal-body h2, .modal-body h3, .modal-body h4, .modal-body h5, .modal-body h6 {
     color: var(--text-primary) !important;
 }
+
+/* Common Hidden Elements */
+.initially-hidden,
+#loading-indicator,
+#notification,
+#existing-report-selection,
+#uniform_grid_container,
+#overall-report-section,
+#stages-section,
+#cross-report-section,
+#comparison-plot-container,
+#cross-comparison-plot-container,
+#download-cross-comparison-csv-button {
+    display: none;
+}
+
+/* Utility classes */
+.margin-top-10 {
+    margin-top: 10px;
+}
+
+/* Show class to override hidden elements when needed */
+.show {
+    display: block !important;
+}
+
+.show-flex {
+    display: flex !important;
+}
+
+.show-inline {
+    display: inline-block !important;
+}

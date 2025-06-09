@@ -183,27 +183,6 @@ function initNotificationSystem() {
 }
 
 /**
- * Show a notification message
- * @param {string} message - Message to display
- * @param {string} type - Type of notification (info, success, warning, error)
- * @param {number} duration - Duration in milliseconds (0 for no auto-hide)
- */
-function showNotification(message, type = 'info', duration = 5000) {
-    const notification = document.getElementById('notification');
-    if (!notification) return;
-    
-    notification.textContent = message;
-    notification.className = `notification ${type}`;
-    notification.style.display = 'block';
-    
-    if (duration > 0) {
-        setTimeout(() => {
-            notification.style.display = 'none';
-        }, duration);
-    }
-}
-
-/**
  * Show or hide the global loading indicator
  * @param {boolean} show - Whether to show or hide the indicator
  */
@@ -212,10 +191,38 @@ function showLoading(show) {
     if (!loadingIndicator) return;
     
     if (show) {
-        loadingIndicator.style.display = 'flex';
+        loadingIndicator.classList.add('show-flex');
     } else {
-        loadingIndicator.style.display = 'none';
+        loadingIndicator.classList.remove('show-flex');
     }
+}
+
+/**
+ * Display a notification message to the user
+ * @param {string} message - The message to display
+ * @param {string} type - The notification type: 'info', 'success', 'warning', or 'error'
+ * @param {number} duration - How long to display the notification in milliseconds
+ */
+function showNotification(message, type = 'info', duration = 5000) {
+    const notification = document.getElementById('notification');
+    if (!notification) return;
+    
+    // Reset classes
+    notification.className = 'notification';
+    
+    // Add type class
+    notification.classList.add(type);
+    
+    // Set message
+    notification.textContent = message;
+    
+    // Show notification
+    notification.classList.add('show');
+    
+    // Hide after duration
+    setTimeout(() => {
+        notification.classList.remove('show');
+    }, duration);
 }
 
 /**
