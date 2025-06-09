@@ -124,6 +124,17 @@ function initThemeSwitcher() {
         
         // Update all active plots with the new theme colors
         updatePlotsForThemeChange();
+        
+        // Force update on all plotly containers by directly applying paper and plot background colors
+        const isLightTheme = document.body.classList.contains('light-theme');
+        document.querySelectorAll('.js-plotly-plot').forEach(container => {
+            if (container && container._fullLayout) {
+                Plotly.relayout(container, {
+                    paper_bgcolor: isLightTheme ? '#ffffff' : '#1e1e1e',
+                    plot_bgcolor: isLightTheme ? '#f8f9fa' : '#252525'
+                });
+            }
+        });
     });
 }
 
@@ -131,6 +142,18 @@ function initThemeSwitcher() {
  * Update all active Plotly plots when theme changes
  */
 function updatePlotsForThemeChange() {
+    const isLightTheme = document.body.classList.contains('light-theme');
+    
+    // Set global plot container background color based on theme
+    document.querySelectorAll('.plot-container, .plotly-container').forEach(container => {
+        container.style.backgroundColor = isLightTheme ? '#ffffff' : '#1e1e1e';
+    });
+    
+    // Find all section headers that contain plot controls
+    document.querySelectorAll('.section-header').forEach(header => {
+        header.style.backgroundColor = isLightTheme ? '#f8f9fa' : '#252525';
+    });
+
     // Find all Plotly containers
     const plotlyContainers = document.querySelectorAll('.js-plotly-plot');
     
@@ -315,9 +338,12 @@ function enhancePlotlyLayout(plotlyDiv) {
     // Get theme colors
     const themeColors = getCurrentThemeColors();
     
-    // Apply theme colors to the plot
-    layout.paper_bgcolor = themeColors.paper_bgcolor;
-    layout.plot_bgcolor = themeColors.plot_bgcolor;
+    // Force plot background colors based on current theme
+    const isLightTheme = document.body.classList.contains('light-theme');
+    
+    // Apply theme colors to the plot with specific overrides for backgrounds
+    layout.paper_bgcolor = isLightTheme ? '#ffffff' : '#1e1e1e';
+    layout.plot_bgcolor = isLightTheme ? '#f8f9fa' : '#252525';
     layout.font = { color: themeColors.font_color };
     
     // Clear title text to prevent overlap with Plotly title and provide more space

@@ -441,9 +441,10 @@ button[type="submit"] {
 .plotly-plot-container {
     width: 100%;
     min-height: 400px;
-    background-color: var(--bg-tertiary);
+    background-color: var(--chart-paper-bgcolor);
     border-radius: var(--border-radius-sm);
     overflow: hidden;
+    transition: background-color 0.3s ease;
 }
 
 /* Responsive Styles */
@@ -899,8 +900,9 @@ button[type="submit"] {
     justify-content: space-between;
     align-items: center;
     padding: var(--spacing-md) var(--spacing-lg);
-    background-color: var(--bg-tertiary);
+    background-color: var(--chart-paper-bgcolor);
     border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.3s ease;
 }
 
 .plot-container {

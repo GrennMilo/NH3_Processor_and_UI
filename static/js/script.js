@@ -543,6 +543,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Apply our enhanced layout after rendering, which handles theme colors
                 if (typeof enhancePlotlyLayout === 'function') {
                     enhancePlotlyLayout(targetDivElement);
+                    
+                    // Also set the container's background color based on theme
+                    const isLightTheme = document.body.classList.contains('light-theme');
+                    targetDivElement.style.backgroundColor = isLightTheme ? '#ffffff' : '#1e1e1e';
                 }
             })
             .catch(error => {
