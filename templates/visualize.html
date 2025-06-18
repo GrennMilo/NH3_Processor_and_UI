@@ -278,7 +278,12 @@ function loadPlotlyJSON(jsonPath, container) {
         .then(plotData => {
             container.innerHTML = '';
             
-            // Create controls container above the plot
+            // Create the plot container div first
+            const plotContainer = document.createElement('div');
+            plotContainer.className = 'plotly-container';
+            container.appendChild(plotContainer);
+            
+            // Create controls container below the plot
             const controlsContainer = document.createElement('div');
             controlsContainer.className = 'plot-controls';
             controlsContainer.innerHTML = `
@@ -289,14 +294,12 @@ function loadPlotlyJSON(jsonPath, container) {
                     <button class="btn-small btn-control" id="${container.id}-toggle-lines" data-lines-hidden="false">
                         <i class="fas fa-grip-lines-vertical"></i> Hide Stage Lines
                     </button>
+                    <button class="btn-small btn-control" id="${container.id}-toggle-theme">
+                        <i class="fas fa-adjust"></i> Toggle Plot Theme
+                    </button>
                 </div>
             `;
             container.appendChild(controlsContainer);
-            
-            // Create the plot container div
-            const plotContainer = document.createElement('div');
-            plotContainer.className = 'plotly-container';
-            container.appendChild(plotContainer);
             
             // Check current theme
             const isLightTheme = document.body.classList.contains('light-theme');
@@ -311,22 +314,103 @@ function loadPlotlyJSON(jsonPath, container) {
                 });
             }
             
+            // Make title more readable
+            if (plotData.layout && plotData.layout.title) {
+                if (typeof plotData.layout.title === 'string') {
+                    plotData.layout.title = {
+                        text: plotData.layout.title,
+                        font: {
+                            size: 16,
+                            color: isLightTheme ? '#212529' : '#ffffff',
+                            weight: 'bold'
+                        }
+                    };
+                } else if (typeof plotData.layout.title === 'object') {
+                    if (!plotData.layout.title.font) plotData.layout.title.font = {};
+                    plotData.layout.title.font.size = 16;
+                    plotData.layout.title.font.color = isLightTheme ? '#212529' : '#ffffff';
+                    plotData.layout.title.font.weight = 'bold';
+                }
+            }
+            
             // Apply current theme colors
-            if (typeof getCurrentThemeColors === 'function') {
-                const themeColors = getCurrentThemeColors();
-                
-                if (!plotData.layout) plotData.layout = {};
-                plotData.layout.paper_bgcolor = themeColors.paper_bgcolor;
-                plotData.layout.plot_bgcolor = themeColors.plot_bgcolor;
-                plotData.layout.font = { color: themeColors.font_color };
+            if (!plotData.layout) plotData.layout = {};
+            
+            // Set theme-appropriate colors for better readability
+            const themeColors = {
+                paper_bgcolor: isLightTheme ? '#ffffff' : '#1e1e1e',
+                plot_bgcolor: isLightTheme ? '#f8f9fa' : '#252525',
+                font_color: isLightTheme ? '#212529' : '#e1e3e8',
+                grid_color: isLightTheme ? '#dee2e6' : '#303030',
+                zero_line_color: isLightTheme ? '#adb5bd' : '#505050',
+                axis_color: isLightTheme ? '#495057' : '#adb5bd'
+            };
+            
+            // Apply theme colors to layout
+            plotData.layout.paper_bgcolor = themeColors.paper_bgcolor;
+            plotData.layout.plot_bgcolor = themeColors.plot_bgcolor;
+            plotData.layout.font = { color: themeColors.font_color, size: 12 };
+            
+            // Enhanced axis style with more visible lines and tick marks
+            const axisStyle = {
+                color: themeColors.axis_color,
+                gridcolor: themeColors.grid_color,
+                zerolinecolor: themeColors.zero_line_color,
+                tickfont: { size: 11, color: themeColors.font_color },
+                title: { font: { size: 12, color: themeColors.font_color } },
+                linecolor: themeColors.axis_color,
+                linewidth: 2,
+                showline: true,
+                mirror: true,
+                ticklen: 5,
+                ticks: 'outside',
+                showticklabels: true
+            };
+            
+            // Apply to x and y axes
+            if (!plotData.layout.xaxis) plotData.layout.xaxis = {};
+            if (!plotData.layout.yaxis) plotData.layout.yaxis = {};
+            
+            Object.assign(plotData.layout.xaxis, axisStyle);
+            Object.assign(plotData.layout.yaxis, axisStyle);
+            
+            // Apply to additional y-axes if they exist
+            for (let i = 2; i <= 9; i++) {
+                const axisName = `yaxis${i}`;
+                if (plotData.layout[axisName]) {
+                    Object.assign(plotData.layout[axisName], axisStyle);
+                }
+            }
+            
+            // Improve margins to ensure axis labels and legend are fully visible
+            if (!plotData.layout.margin) {
+                plotData.layout.margin = { l: 80, r: 80, t: 60, b: 140, pad: 4 };
+            } else {
+                // Ensure bottom margin is sufficient for legend
+                plotData.layout.margin.b = Math.max(plotData.layout.margin.b || 70, 140);
             }
             
             // Adjust height for cross-comparison plots
             if (container.id === 'cross-comparison-plot-container') {
                 if (plotData.layout) {
-                    plotData.layout.height = 800; // Taller height for cross-comparison plot
+                    plotData.layout.height = 1500; // Increased height for cross-comparison plot
                 }
             }
+            
+            // Position legend below the plot to prevent overlap
+            if (!plotData.layout.legend) plotData.layout.legend = {};
+            plotData.layout.legend = {
+                orientation: 'h',
+                x: 0,
+                y: -0.15,
+                xanchor: 'left',
+                yanchor: 'top',
+                bgcolor: themeColors.paper_bgcolor + '80',
+                bordercolor: 'rgba(0,0,0,0)',
+                font: { size: 10, color: themeColors.font_color },
+                itemsizing: 'constant',
+                itemwidth: 30
+            };
             
             // Create the Plotly plot
             Plotly.newPlot(plotContainer, plotData.data, plotData.layout, {responsive: true});
@@ -338,64 +422,133 @@ function loadPlotlyJSON(jsonPath, container) {
             plotDiv.originalData = JSON.parse(JSON.stringify(plotData.data));
             plotDiv.originalLayout = JSON.parse(JSON.stringify(plotData.layout));
             
-            // Apply layout enhancements
-            enhancePlotlyLayout(plotDiv);
+            // Add event listeners for controls
+            const autoscaleBtn = document.getElementById(`${container.id}-autoscale`);
+            const toggleLinesBtn = document.getElementById(`${container.id}-toggle-lines`);
+            const toggleThemeBtn = document.getElementById(`${container.id}-toggle-theme`);
             
-            // Set up autoscale button functionality
-            document.getElementById(`${container.id}-autoscale`).addEventListener('click', function() {
-                const update = {};
-                
-                // Get all y-axes from the layout
-                const axes = Object.keys(plotDiv._fullLayout).filter(key => key.startsWith('yaxis'));
-                
-                // Set autorange=true for all y-axes
-                axes.forEach(axis => {
-                    update[`${axis}.autorange`] = true;
+            // Autoscale button
+            autoscaleBtn.addEventListener('click', () => {
+                Plotly.relayout(plotContainer, {
+                    'xaxis.autorange': true,
+                    'yaxis.autorange': true,
+                    'yaxis2.autorange': true,
+                    'yaxis3.autorange': true,
+                    'yaxis4.autorange': true,
+                    'yaxis5.autorange': true,
+                    'yaxis6.autorange': true,
+                    'yaxis7.autorange': true,
+                    'yaxis8.autorange': true,
+                    'yaxis9.autorange': true
                 });
-                
-                // Apply the update
-                Plotly.relayout(plotDiv, update);
             });
             
-            // Set up toggle stage division lines button functionality
-            document.getElementById(`${container.id}-toggle-lines`).addEventListener('click', function() {
-                // Get current layout and shapes
-                const currentLayout = plotDiv._fullLayout;
-                const shapes = currentLayout.shapes || [];
+            // Toggle lines button
+            toggleLinesBtn.addEventListener('click', () => {
+                const button = toggleLinesBtn;
+                const isHidden = button.getAttribute('data-lines-hidden') === 'true';
                 
-                // Check if we have shapes (stage division lines)
-                if (shapes.length > 0) {
-                    // Find shapes that are likely stage division lines (vertical lines)
-                    const stageLineIndices = [];
-                    shapes.forEach((shape, index) => {
-                        // Vertical lines would have x0 === x1 and y0 !== y1
-                        if (shape.type === 'line' && shape.x0 === shape.x1 && shape.y0 !== shape.y1) {
-                            stageLineIndices.push(index);
+                if (plotData.layout.shapes) {
+                    const updatedShapes = plotData.layout.shapes.map(shape => {
+                        if (shape.type === 'line' && shape.x0 === shape.x1) {
+                            // Toggle visibility of vertical stage lines
+                            const newShape = {...shape};
+                            newShape.visible = isHidden;
+                            return newShape;
                         }
+                        return shape;
                     });
                     
-                    if (stageLineIndices.length > 0) {
-                        // Get current visibility state from button's data attribute
-                        const btn = this;
-                        const linesHidden = btn.getAttribute('data-lines-hidden') === 'true';
-                        
-                        // Prepare update object for Plotly.relayout
-                        const update = {};
-                        stageLineIndices.forEach(idx => {
-                            // Toggle visibility (visible when linesHidden is true, hidden when linesHidden is false)
-                            update[`shapes[${idx}].visible`] = linesHidden;
-                        });
-                        
-                        // Apply the update
-                        Plotly.relayout(plotDiv, update);
-                        
-                        // Update button text and data attribute
-                        btn.setAttribute('data-lines-hidden', !linesHidden);
-                        btn.innerHTML = linesHidden ? 
-                            '<i class="fas fa-grip-lines-vertical"></i> Hide Stage Lines' : 
-                            '<i class="fas fa-grip-lines-vertical"></i> Show Stage Lines';
-                    }
+                    Plotly.relayout(plotContainer, {'shapes': updatedShapes});
+                    button.setAttribute('data-lines-hidden', isHidden ? 'false' : 'true');
+                    button.innerHTML = isHidden ? 
+                        '<i class="fas fa-grip-lines-vertical"></i> Hide Stage Lines' : 
+                        '<i class="fas fa-grip-lines-vertical"></i> Show Stage Lines';
                 }
+            });
+            
+            // Toggle theme button
+            toggleThemeBtn.addEventListener('click', () => {
+                // Toggle between light and dark theme for this specific plot
+                const currentPlotTheme = plotDiv.getAttribute('data-theme') || (isLightTheme ? 'light' : 'dark');
+                const newTheme = currentPlotTheme === 'light' ? 'dark' : 'light';
+                
+                // Save current theme to the plot div
+                plotDiv.setAttribute('data-theme', newTheme);
+                
+                // Create theme colors based on new theme
+                const themeColors = {
+                    paper_bgcolor: newTheme === 'light' ? '#ffffff' : '#1e1e1e',
+                    plot_bgcolor: newTheme === 'light' ? '#f8f9fa' : '#252525',
+                    font_color: newTheme === 'light' ? '#212529' : '#e1e3e8',
+                    grid_color: newTheme === 'light' ? '#dee2e6' : '#303030',
+                    zero_line_color: newTheme === 'light' ? '#adb5bd' : '#505050',
+                    axis_color: newTheme === 'light' ? '#495057' : '#adb5bd'
+                };
+                
+                // Update plot layout with new theme colors
+                const layoutUpdate = {
+                    paper_bgcolor: themeColors.paper_bgcolor,
+                    plot_bgcolor: themeColors.plot_bgcolor,
+                    'font.color': themeColors.font_color,
+                    'legend.font.color': themeColors.font_color,
+                    'legend.bgcolor': themeColors.paper_bgcolor + '80',
+                    'legend.orientation': 'h',
+                    'legend.x': 0,
+                    'legend.y': -0.15,
+                    'legend.xanchor': 'left',
+                    'legend.yanchor': 'top'
+                };
+                
+                // Update all axes
+                const axisUpdate = {
+                    color: themeColors.axis_color,
+                    gridcolor: themeColors.grid_color,
+                    zerolinecolor: themeColors.zero_line_color,
+                    'tickfont.color': themeColors.font_color,
+                    'title.font.color': themeColors.font_color,
+                    linecolor: themeColors.axis_color
+                };
+                
+                // Apply to each axis
+                ['xaxis', 'yaxis'].forEach(axis => {
+                    Object.entries(axisUpdate).forEach(([key, value]) => {
+                        layoutUpdate[`${axis}.${key}`] = value;
+                    });
+                });
+                
+                // Apply to additional y-axes
+                for (let i = 2; i <= 9; i++) {
+                    const axisName = `yaxis${i}`;
+                    Object.entries(axisUpdate).forEach(([key, value]) => {
+                        layoutUpdate[`${axisName}.${key}`] = value;
+                    });
+                }
+                
+                // Update title color
+                if (plotData.layout.title) {
+                    layoutUpdate['title.font.color'] = newTheme === 'light' ? '#212529' : '#ffffff';
+                }
+                
+                // Update stage lines color if they exist
+                if (plotData.layout.shapes) {
+                    const stageLineColor = newTheme === 'light' ? '#000000' : '#ffffff';
+                    const updatedShapes = plotData.layout.shapes.map(shape => {
+                        if (shape.type === 'line' && shape.x0 === shape.x1) {
+                            const newShape = {...shape};
+                            newShape.line.color = stageLineColor;
+                            return newShape;
+                        }
+                        return shape;
+                    });
+                    layoutUpdate.shapes = updatedShapes;
+                }
+                
+                // Apply the theme changes
+                Plotly.relayout(plotContainer, layoutUpdate);
+                
+                // Update button text
+                toggleThemeBtn.innerHTML = `<i class="fas fa-adjust"></i> Toggle Plot Theme (${newTheme.charAt(0).toUpperCase() + newTheme.slice(1)})`;
             });
         })
         .catch(error => {
@@ -717,35 +870,45 @@ function showNotification(message, type = 'info') {
 <style>
 /* Plot Control Styles */
 .plot-controls {
+    margin-top: 15px;
     margin-bottom: 10px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: center;
+    padding: 10px;
+    background-color: var(--bg-tertiary);
+    border-radius: 6px;
+    border-top: 1px solid var(--border-color);
 }
 
 .control-buttons {
     display: flex;
-    gap: 10px;
+    gap: 15px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 /* Control buttons with proper theme support */
 .btn-control {
-    background-color: var(--chart-paper-bgcolor);
-    color: var(--chart-font-color);
-    border: 1px solid var(--chart-gridcolor);
-    border-radius: 4px;
-    padding: 5px 10px;
-    font-size: 12px;
+    background-color: var(--accent-primary);
+    color: white;
+    border: 1px solid var(--accent-secondary);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.3s ease;
+    white-space: nowrap;
 }
 
 .btn-control:hover {
-    background-color: var(--bg-hover);
-    border-color: var(--border-color);
+    background-color: var(--accent-secondary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .btn-control i {
-    margin-right: 5px;
+    margin-right: 6px;
 }
 
 .plotly-container {
@@ -787,7 +950,39 @@ function showNotification(message, type = 'info') {
 
 /* Cross-comparison plot specific styles */
 #cross-comparison-plot-container .plotly-container {
-    min-height: 800px; /* Increased height for cross-comparison plots */
+    min-height: 1500px; /* Increased height for cross-comparison plots */
+    margin-bottom: 30px; /* Extra space for legend */
+}
+
+/* Improve plot container spacing and prevent overlaps */
+.plot-container {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+/* Ensure proper spacing for plot titles and legends */
+.plotly-container {
+    padding-top: 10px;
+    padding-bottom: 20px; /* Extra space for horizontal legend below */
+}
+
+/* Fix for overlapping text in plots */
+.js-plotly-plot .plotly .modebar {
+    top: 10px !important;
+    right: 10px !important;
+}
+
+/* Improve section spacing */
+.visualization-section .section-header {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.visualization-section .section-header h3 {
+    margin-bottom: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
 }
 
 /* No need for light theme overrides as we're using CSS variables */

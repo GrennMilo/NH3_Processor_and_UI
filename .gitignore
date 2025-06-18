@@ -13,43 +13,99 @@ venv/
 env/
 ENV/
 
-# Database files
+# Database files - exclude the large database but keep the Python files
 *.db
-database/*.db
-database/*.sqlite
+*.sqlite
+*.sqlite3
+Database/*.db
+Database/*.sqlite
+Database/*.sqlite3
+# Include database Python files
+!Database/*.py
 
 # Logs
 logs/
 *.log
 
-# Report data (might be large)
+# Report data (might be large) - exclude generated reports
 static/reports/*
 !static/reports/.gitkeep
 
-# Uploads directory (user uploads)
+# Uploads directory (user uploads) - exclude uploaded files
 uploads/*
 !uploads/.gitkeep
 
-# Original data files
+# Original data files - exclude user data files
 static/original_files/*
 !static/original_files/.gitkeep
 
 # Data Light directory (temporary data)
 data Light/
 
+# Temporary files and processing results
+temp/
+tmp/
+*.tmp
+
 # Local configuration
 instance/
 .env
+config.local.py
 
 # IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-*
 
 # Windows specific
 Thumbs.db
 desktop.ini
+ehthumbs.db
 
 # macOS specific
-.DS_Store 
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux specific
+*~
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Unit test / pytest
+.pytest_cache/
+.tox/
+
+# Flask specific
+*.pyc
+*.pyo
+*.pyd
+__pycache__
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+nosetests.xml
+.cache
+.pytest_cache/
+
+# Node modules (if any frontend tools are used)
+node_modules/
+npm-debug.log*
+
+# Backup files
+*.bak
+*.backup
+*~ 

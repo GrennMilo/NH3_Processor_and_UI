@@ -20,7 +20,11 @@
         <div class="reports-list-container">
             <h3><i class="fas fa-folder-open"></i> Available Reports</h3>
             <div class="search-filter">
-                <input type="text" id="reports-search" placeholder="Search reports..." class="search-input">
+                <div class="search-input-container">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="reports-search" placeholder="Search by name, experiment number, catalyst batch, or GC correction..." class="search-input">
+                    <button id="clear-search" class="clear-search-btn" title="Clear search" style="display: none;"><i class="fas fa-times"></i></button>
+                </div>
             </div>
             <div class="reports-list" id="reports-list">
                 <p class="loading-text">Loading reports...</p>
@@ -65,6 +69,44 @@
         </div>
     </div>
 </div>
+
+<style>
+/* Modal styles to ensure visibility */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: var(--bg-secondary);
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: var(--border-radius-md);
+    width: 80%;
+    max-width: 600px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    position: relative;
+}
+
+.close-modal {
+    color: var(--text-secondary);
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-modal:hover {
+    color: var(--text-primary);
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -79,14 +121,24 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('refresh-reports-btn').addEventListener('click', loadReportsList);
     
     // Search functionality
-    document.getElementById('reports-search').addEventListener('input', filterReports);
+    const searchInput = document.getElementById('reports-search');
+    const clearSearchBtn = document.getElementById('clear-search');
     
-    // Close modals when clicking the X
-    document.querySelectorAll('.close-modal').forEach(closeBtn => {
-        closeBtn.addEventListener('click', function() {
-            this.closest('.modal').style.display = 'none';
-        });
+    searchInput.addEventListener('input', function() {
+        filterReports();
+        // Show clear button if there's text
+        clearSearchBtn.style.display = this.value ? 'block' : 'none';
     });
+    
+    // Clear search button
+    clearSearchBtn.addEventListener('click', function() {
+        searchInput.value = '';
+        filterReports();
+        this.style.display = 'none';
+    });
+    
+    // Set up modal close functionality
+    setupModalHandlers();
     
     // Close contents modal with close button
     document.getElementById('close-contents-button').addEventListener('click', function() {
@@ -103,6 +155,25 @@ document.addEventListener('DOMContentLoaded', function() {
     // Rename report
     document.getElementById('confirm-rename-button').addEventListener('click', handleRenameReport);
 });
+
+function setupModalHandlers() {
+    // Close modals when clicking the X
+    document.querySelectorAll('.close-modal').forEach(closeBtn => {
+        closeBtn.addEventListener('click', function() {
+            this.closest('.modal').style.display = 'none';
+        });
+    });
+    
+    // Close modals when clicking outside the modal content
+    window.addEventListener('click', function(event) {
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(modal => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+}
 
 function loadReportsList() {
     showLoading(true);
@@ -168,13 +239,45 @@ function renderReportsList(reports) {
         
         reportsListContainer.appendChild(reportCard);
         
+        // Fetch metadata for this report to enable searching
+        fetch(`/api/report-metadata/${encodeURIComponent(report.name)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Store simplified metadata in the card for search purposes
+                    const searchableMetadata = {
+                        experimentNumber: data.metadata.experiment_number,
+                        catalystBatch: data.metadata.catalyst_batch,
+                        reactorNumber: data.metadata.reactor_number,
+                        gcCorrectionFactor: data.metadata.gc_correction_factor
+                    };
+                    reportCard.dataset.metadata = JSON.stringify(searchableMetadata);
+                    
+                    // Add GC correction factor to visible metadata if available
+                    if (data.metadata.gc_correction_factor) {
+                        const metaContainer = reportCard.querySelector('.report-card-meta');
+                        const gcCorrectionItem = document.createElement('div');
+                        gcCorrectionItem.className = 'meta-item';
+                        gcCorrectionItem.innerHTML = `
+                            <i class="fas fa-calculator"></i>
+                            <span>GC Corr: ${data.metadata.gc_correction_factor}</span>
+                        `;
+                        metaContainer.appendChild(gcCorrectionItem);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error(`Error fetching metadata for ${report.name}:`, error);
+            });
+        
         // Add event listeners
         reportCard.querySelector('.view-report-btn').addEventListener('click', function() {
             const reportName = reportCard.dataset.reportName;
             loadReportDetails(reportName);
         });
         
-        reportCard.querySelector('.rename-report-btn').addEventListener('click', function() {
+        reportCard.querySelector('.rename-report-btn').addEventListener('click', function(e) {
+            e.stopPropagation(); // Prevent event bubbling to the card click handler
             const reportName = reportCard.dataset.reportName;
             showRenameModal(reportName);
         });
@@ -196,17 +299,72 @@ function renderReportsList(reports) {
 }
 
 function filterReports() {
-    const searchText = document.getElementById('reports-search').value.toLowerCase();
+    const searchText = document.getElementById('reports-search').value.toLowerCase().trim();
     const reportCards = document.querySelectorAll('.report-card');
+    
+    if (!searchText) {
+        // If search is empty, show all reports
+        reportCards.forEach(card => {
+            card.style.display = 'block';
+        });
+        return;
+    }
+    
+    // Keep track of visible reports count
+    let visibleCount = 0;
     
     reportCards.forEach(card => {
         const reportName = card.dataset.reportName.toLowerCase();
+        // Default visibility is false, will be set to true if match is found
+        let isVisible = false;
+        
+        // Check report name
         if (reportName.includes(searchText)) {
-            card.style.display = 'block';
-        } else {
-            card.style.display = 'none';
+            isVisible = true;
+        }
+        
+        // If not visible by name, get additional metadata and check
+        if (!isVisible && card.dataset.metadata) {
+            try {
+                const metadata = JSON.parse(card.dataset.metadata);
+                
+                // Check various metadata fields
+                if (
+                    (metadata.experimentNumber && metadata.experimentNumber.toLowerCase().includes(searchText)) ||
+                    (metadata.catalystBatch && metadata.catalystBatch.toLowerCase().includes(searchText)) ||
+                    (metadata.reactorNumber && metadata.reactorNumber.toLowerCase().includes(searchText)) ||
+                    (metadata.gcCorrectionFactor && metadata.gcCorrectionFactor.toString().toLowerCase().includes(searchText))
+                ) {
+                    isVisible = true;
+                }
+            } catch (e) {
+                console.error('Error parsing metadata for search:', e);
+            }
+        }
+        
+        // Set display style based on visibility
+        card.style.display = isVisible ? 'block' : 'none';
+        
+        // Increment visible count if report is visible
+        if (isVisible) {
+            visibleCount++;
         }
     });
+    
+    // Show message if no results found
+    const reportsListContainer = document.getElementById('reports-list');
+    const noResultsMsg = reportsListContainer.querySelector('.no-search-results');
+    
+    if (visibleCount === 0) {
+        if (!noResultsMsg) {
+            const msg = document.createElement('p');
+            msg.className = 'no-search-results';
+            msg.innerHTML = `No reports found matching "<strong>${searchText}</strong>"`;
+            reportsListContainer.appendChild(msg);
+        }
+    } else if (noResultsMsg) {
+        noResultsMsg.remove();
+    }
 }
 
 function loadReportDetails(reportName) {
@@ -304,6 +462,16 @@ function renderReportDetails(reportName, data) {
                 <div class="summary-content">
                     <h4>Files</h4>
                     <p>${data.files_count || '0'}</p>
+                </div>
+            </div>
+            
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i class="fas fa-calculator"></i>
+                </div>
+                <div class="summary-content">
+                    <h4>GC Correction Factor</h4>
+                    <p>${data.gc_correction_factor || '0.86 (default)'}</p>
                 </div>
             </div>
         </div>
@@ -717,13 +885,18 @@ function showRenameModal(reportName) {
     document.getElementById('new-report-name').value = reportName;
     
     // Show the modal
-    document.getElementById('rename-report-modal').style.display = 'block';
+    const modal = document.getElementById('rename-report-modal');
+    modal.style.display = 'block';
+    
+    // Focus on the input field
+    document.getElementById('new-report-name').focus();
 }
 
 function handleRenameReport() {
     const oldName = currentReportName;
     const newName = document.getElementById('new-report-name').value.trim();
     
+    // Validate input
     if (!oldName || !newName) {
         showNotification('Report name cannot be empty.', 'warning');
         return;
@@ -734,6 +907,12 @@ function handleRenameReport() {
         return;
     }
     
+    // Disable button to prevent double submission
+    const renameButton = document.getElementById('confirm-rename-button');
+    renameButton.disabled = true;
+    renameButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Renaming...';
+    
+    // Show loading indicator
     showLoading(true);
     
     fetch('/api/rename-report', {
@@ -769,6 +948,11 @@ function handleRenameReport() {
         document.getElementById('rename-report-modal').style.display = 'none';
         console.error('Error renaming report:', error);
         showNotification('Failed to rename report. Please try again.', 'error');
+    })
+    .finally(() => {
+        // Re-enable button
+        renameButton.disabled = false;
+        renameButton.innerHTML = 'Confirm Rename';
     });
 }
 
@@ -1005,6 +1189,7 @@ function renderMetadataDisplay(metadata, container, fileExists = true) {
     html += createMetadataItem('Bed Length', `${metadata.catalyst_bed_length} cm`);
     html += createMetadataItem('TC at Top', metadata.tc_top);
     html += createMetadataItem('TC at Bottom', metadata.tc_bottom);
+    html += createMetadataItem('GC Correction Factor', metadata.gc_correction_factor || '0.86 (default)');
     
     if (metadata.updated_at) {
         html += createMetadataItem('Last Updated', metadata.updated_at);
@@ -1156,6 +1341,14 @@ function renderMetadataEditForm(reportName, metadata, container) {
                     <i class="fas fa-thermometer-quarter"></i> TC at Bottom of Bed
                 </label>
                 <input type="text" id="edit_tc_bottom" name="tc_bottom" value="${metadata.tc_bottom || ''}" placeholder="e.g., TC2">
+            </div>
+            
+            <div class="form-group">
+                <label for="edit_gc_correction_factor">
+                    <i class="fas fa-calculator"></i> GC Correction Factor
+                </label>
+                <input type="number" id="edit_gc_correction_factor" name="gc_correction_factor" 
+                       value="${metadata.gc_correction_factor || '0.86'}" step="0.01" placeholder="e.g., 0.86">
             </div>
             
             <div class="form-group full-width">

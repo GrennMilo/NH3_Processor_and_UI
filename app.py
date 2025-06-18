@@ -147,6 +147,17 @@ def api_report_stats(report_name):
         # Get basic stats
         created_at = datetime.fromtimestamp(os.path.getctime(report_folder)).strftime('%Y-%m-%d %H:%M:%S')
         
+        # Get GC correction factor from metadata if available
+        gc_correction_factor = None
+        metadata_file_path = os.path.join(report_folder, 'catalyst_metadata.json')
+        if os.path.exists(metadata_file_path):
+            try:
+                with open(metadata_file_path, 'r') as f:
+                    metadata = json.load(f)
+                    gc_correction_factor = metadata.get('gc_correction_factor')
+            except Exception as e:
+                print(f"Error reading metadata for {report_name}: {e}")
+        
         # Count files and get total size
         total_files = 0
         total_size = 0
@@ -294,6 +305,7 @@ def api_report_stats(report_name):
             'files_count': total_files,
             'total_size': total_size,
             'stages_data': stages_data,
+            'gc_correction_factor': gc_correction_factor,
             'export_url': export_url if os.path.exists(os.path.join(app.static_folder, 'reports', report_name, 'overall_merged_data.csv')) else None
         })
     except Exception as e:
@@ -339,6 +351,7 @@ def api_get_report_metadata(report_name):
                 'tc_top': '',
                 'tc_bottom': '',
                 'catalyst_notes': '',
+                'gc_correction_factor': '0.86',
                 'created_at': '',
                 'updated_at': ''
             }
@@ -390,6 +403,7 @@ def api_update_report_metadata(report_name):
             'catalyst_bed_length': data.get('catalyst_bed_length', existing_metadata.get('catalyst_bed_length', '')),
             'tc_top': data.get('tc_top', existing_metadata.get('tc_top', '')),
             'tc_bottom': data.get('tc_bottom', existing_metadata.get('tc_bottom', '')),
+            'gc_correction_factor': data.get('gc_correction_factor', existing_metadata.get('gc_correction_factor', '0.86')),
             'catalyst_notes': data.get('catalyst_notes', existing_metadata.get('catalyst_notes', '')),
             'created_at': existing_metadata.get('created_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -693,6 +707,10 @@ def process_files():
             use_uniform_grid = request.form.get('use_uniform_grid', 'true').lower() == 'true'
             grid_freq = request.form.get('grid_freq', '1min')
             
+            # Get GC correction factor
+            gc_correction_factor = float(request.form.get('gc_correction_factor', '0.86'))
+            print(f"Using GC correction factor: {gc_correction_factor}")
+            
             # Validate interpolation_kind to prevent injection
             valid_interpolation_kinds = ['linear', 'cubic', 'quadratic', 'nearest']
             if interpolation_kind not in valid_interpolation_kinds:
@@ -704,7 +722,7 @@ def process_files():
                 grid_freq = '1min'  # Default to 1min if invalid
 
             # Call the main processing function from the refactored module
-            # Pass the static reports folder as the base output directory and the prefix
+            # Pass the static reports folder as the base output folder and the prefix
             results = main_web_processor.generate_reports(
                 lv_filepath,
                 gc_filepath,
@@ -714,7 +732,8 @@ def process_files():
                 interpolation_kind=interpolation_kind,
                 use_uniform_grid=use_uniform_grid,
                 grid_freq=grid_freq,
-                existing_report_path=existing_report_path
+                existing_report_path=existing_report_path,
+                gc_correction_factor=gc_correction_factor
             )
             
             # --- Save Catalyst Metadata ---
@@ -731,12 +750,14 @@ def process_files():
                         'catalyst_weight': request.form.get('catalyst_weight', ''),
                         'catalyst_volume': request.form.get('catalyst_volume', ''),
                         'catalyst_state': request.form.get('catalyst_state', ''),
+                        'particle_size': request.form.get('particle_size', ''),
                         'diluent_type': request.form.get('diluent_type', ''),
                         'catalyst_diluent_ratio': request.form.get('catalyst_diluent_ratio', ''),
                         'catalyst_bed_length': request.form.get('catalyst_bed_length', ''),
                         'tc_top': request.form.get('tc_top', ''),
                         'tc_bottom': request.form.get('tc_bottom', ''),
                         'catalyst_notes': request.form.get('catalyst_notes', ''),
+                        'gc_correction_factor': gc_correction_factor,
                         'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     }
@@ -753,6 +774,38 @@ def process_files():
                     except Exception as e:
                         print(f"Error saving catalyst metadata: {e}")
                         results['metadata_saved'] = False
+                    
+                    # --- Save Original Uploaded Files ---
+                    # Create proper filenames using metadata
+                    experiment_number = catalyst_metadata.get('experiment_number', 'Unknown')
+                    catalyst_batch = catalyst_metadata.get('catalyst_batch', 'Unknown')
+                    reactor_number = catalyst_metadata.get('reactor_number', 'Unknown')
+                    
+                    # Generate filenames: Exp_Batch_Reactor_LV.txt and Exp_Batch_Reactor_GC.txt
+                    base_filename = f"{experiment_number}_{catalyst_batch}_{reactor_number}"
+                    lv_stored_filename = f"{base_filename}_LV.txt"
+                    gc_stored_filename = f"{base_filename}_GC.txt"
+                    
+                    # Copy uploaded files to report folder with new names
+                    try:
+                        import shutil
+                        lv_stored_path = os.path.join(report_folder, lv_stored_filename)
+                        gc_stored_path = os.path.join(report_folder, gc_stored_filename)
+                        
+                        shutil.copy2(lv_filepath, lv_stored_path)
+                        shutil.copy2(gc_filepath, gc_stored_path)
+                        
+                        print(f"Original files saved to report folder:")
+                        print(f"  LV: {lv_stored_path}")
+                        print(f"  GC: {gc_stored_path}")
+                        
+                        # Add file storage info to results
+                        results['original_files_saved'] = True
+                        results['lv_stored_filename'] = lv_stored_filename
+                        results['gc_stored_filename'] = gc_stored_filename
+                    except Exception as e:
+                        print(f"Error saving original files to report folder: {e}")
+                        results['original_files_saved'] = False
                 # For existing reports, the metadata file should already exist
                 # No need to update it when adding new data points
                 else:
@@ -767,12 +820,14 @@ def process_files():
                             'catalyst_weight': '',
                             'catalyst_volume': '',
                             'catalyst_state': '',
+                            'particle_size': '',
                             'diluent_type': '',
                             'catalyst_diluent_ratio': '',
                             'catalyst_bed_length': '',
                             'tc_top': '',
                             'tc_bottom': '',
                             'catalyst_notes': '',
+                            'gc_correction_factor': '0.86',
                             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                         }
@@ -787,6 +842,47 @@ def process_files():
                     # Just inform the user metadata is preserved
                     results['metadata_saved'] = True
                     results['metadata_preserved'] = True
+                    
+                    # --- Save Latest Version of Original Files for Existing Reports ---
+                    # Load existing metadata to get naming convention
+                    try:
+                        with open(metadata_file_path, 'r') as f:
+                            existing_metadata = json.load(f)
+                        
+                        experiment_number = existing_metadata.get('experiment_number', 'Unknown')
+                        catalyst_batch = existing_metadata.get('catalyst_batch', 'Unknown')
+                        reactor_number = existing_metadata.get('reactor_number', 'Unknown')
+                        
+                        # Generate filenames using existing metadata
+                        base_filename = f"{experiment_number}_{catalyst_batch}_{reactor_number}"
+                        lv_stored_filename = f"{base_filename}_LV.txt"
+                        gc_stored_filename = f"{base_filename}_GC.txt"
+                        
+                        # Copy uploaded files to report folder, overwriting existing ones
+                        import shutil
+                        lv_stored_path = os.path.join(report_folder, lv_stored_filename)
+                        gc_stored_path = os.path.join(report_folder, gc_stored_filename)
+                        
+                        shutil.copy2(lv_filepath, lv_stored_path)
+                        shutil.copy2(gc_filepath, gc_stored_path)
+                        
+                        print(f"Latest original files saved to existing report folder:")
+                        print(f"  LV: {lv_stored_path}")
+                        print(f"  GC: {gc_stored_path}")
+                        
+                        # Update metadata with latest update timestamp
+                        existing_metadata['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        with open(metadata_file_path, 'w') as f:
+                            json.dump(existing_metadata, f, indent=2)
+                        
+                        # Add file storage info to results
+                        results['original_files_saved'] = True
+                        results['lv_stored_filename'] = lv_stored_filename
+                        results['gc_stored_filename'] = gc_stored_filename
+                        results['files_updated'] = True
+                    except Exception as e:
+                        print(f"Error saving latest original files to existing report: {e}")
+                        results['original_files_saved'] = False
             
             # --- Cleanup Uploaded Files (Optional) ---
             # You might want to keep these for debugging or remove them
@@ -1553,6 +1649,17 @@ def api_detailed_reports_list():
             step_folders = [d for d in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, d)) and d.startswith('step_')]
             step_folders.sort(key=lambda x: int(x.split('_')[1]) if x.split('_')[1].isdigit() else 0)
             
+            # Get GC correction factor from metadata if available
+            gc_correction_factor = None
+            metadata_file_path = os.path.join(folder_path, 'catalyst_metadata.json')
+            if os.path.exists(metadata_file_path):
+                try:
+                    with open(metadata_file_path, 'r') as f:
+                        metadata = json.load(f)
+                        gc_correction_factor = metadata.get('gc_correction_factor')
+                except Exception as e:
+                    print(f"Error reading metadata for {folder}: {e}")
+            
             # Calculate total data points and date range
             total_data_points = 0
             date_start = None
@@ -1642,7 +1749,8 @@ def api_detailed_reports_list():
                 'stages': len(step_folders),
                 'data_points': total_data_points,
                 'date_start': date_start,
-                'date_end': date_end
+                'date_end': date_end,
+                'gc_correction_factor': gc_correction_factor
             })
         
         return jsonify({'success': True, 'reports': reports_data})
@@ -1711,6 +1819,51 @@ def download_original_file(filename):
         return send_file(file_path, as_attachment=True, download_name=filename)
     except Exception as e:
         print(f"Error downloading file {filename}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error downloading file: {e}'}), 500
+
+@app.route('/download_report_original_file/<report_name>/<file_type>')
+def download_report_original_file(report_name, file_type):
+    """Download original LV or GC files from a specific report folder."""
+    try:
+        # Secure the report name to prevent directory traversal
+        report_name = secure_filename(report_name)
+        
+        # Validate file type
+        if file_type not in ['LV', 'GC']:
+            return jsonify({'success': False, 'message': 'Invalid file type. Must be LV or GC.'}), 400
+        
+        # Get report folder path
+        report_folder = os.path.join(REPORTS_FOLDER, report_name)
+        if not os.path.exists(report_folder):
+            return jsonify({'success': False, 'message': 'Report not found'}), 404
+        
+        # Load metadata to get the correct filename
+        metadata_file_path = os.path.join(report_folder, 'catalyst_metadata.json')
+        if not os.path.exists(metadata_file_path):
+            return jsonify({'success': False, 'message': 'Report metadata not found'}), 404
+        
+        with open(metadata_file_path, 'r') as f:
+            metadata = json.load(f)
+        
+        experiment_number = metadata.get('experiment_number', 'Unknown')
+        catalyst_batch = metadata.get('catalyst_batch', 'Unknown')
+        reactor_number = metadata.get('reactor_number', 'Unknown')
+        
+        # Generate the expected filename
+        base_filename = f"{experiment_number}_{catalyst_batch}_{reactor_number}"
+        filename = f"{base_filename}_{file_type}.txt"
+        
+        # Check if file exists
+        file_path = os.path.join(report_folder, filename)
+        if not os.path.exists(file_path):
+            return jsonify({'success': False, 'message': f'Original {file_type} file not found in report'}), 404
+        
+        return send_file(file_path, as_attachment=True, download_name=filename)
+        
+    except Exception as e:
+        print(f"Error downloading report original file: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Error downloading file: {e}'}), 500

@@ -2,49 +2,136 @@
 
 {% block title %}Home - Skid NH3 Syn. Data Processor{% endblock %}
 
+{% block head_extras %}
+<style>
+    /* Custom styles for index.html search input */
+    .search-input-container {
+        position: relative;
+        width: 100%;
+        margin-bottom: 15px;
+    }
+    
+    .search-input {
+        width: 100%;
+        padding: 10px 35px 10px 35px;
+        border-radius: var(--border-radius-sm);
+        border: 1px solid var(--border-color);
+        background-color: var(--bg-tertiary);
+        color: var(--text-primary);
+        font-size: var(--font-size-md);
+    }
+    
+    .search-input:focus {
+        border-color: var(--accent-primary);
+        outline: none;
+    }
+    
+    .search-icon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-secondary);
+    }
+    
+    .btn-icon {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 5px;
+        border-radius: 50%;
+    }
+    
+    .btn-icon:hover {
+        color: var(--text-primary);
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    /* Specific styling for download buttons */
+    .btn-icon[title*="LV"] {
+        color: var(--accent-primary);
+    }
+    
+    .btn-icon[title*="GC"] {
+        color: var(--success-color);
+    }
+    
+    .btn-icon[title*="LV"]:hover,
+    .btn-icon[title*="GC"]:hover {
+        transform: scale(1.1);
+        transition: transform 0.2s ease;
+    }
+    
+    /* Ensure table has consistent dark theme */
+    .reports-table th {
+        background-color: var(--bg-tertiary);
+        color: var(--text-primary);
+        padding: 12px 15px;
+    }
+    
+    .reports-table tr:nth-child(odd) {
+        background-color: var(--bg-secondary);
+    }
+    
+    .reports-table tr:nth-child(even) {
+        background-color: var(--bg-tertiary);
+    }
+    
+    .reports-table tr:hover {
+        background-color: var(--border-color);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="main-content">
     
     <div class="recent-reports">
         <h2 class="section-title">Reports Overview</h2>
         <div class="reports-table-container">
-            <table class="reports-table" id="reports-table">
-                <thead>
-                    <tr>
-                        <th>Report Name</th>
-                        <th>Stages</th>
-                        <th>Data Points</th>
-                        <th>Date Range</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="reports-table-body">
-                    <tr>
-                        <td colspan="5" class="loading-text">Loading reports data...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-    
-    <div class="original-files">
-        <h2 class="section-title">Original Data Files</h2>
-        <div class="files-table-container">
-            <table class="files-table" id="files-table">
-                <thead>
-                    <tr>
-                        <th>File Name</th>
-                        <th>Type</th>
-                        <th>Size</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="files-table-body">
-                    <tr>
-                        <td colspan="4" class="loading-text">Loading files data...</td>
-                    </tr>
-                </tbody>
-            </table>
+            <!-- Report Listing Section -->
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-file-alt"></i> Available Reports</h2>
+                </div>
+                <div class="card-body">
+                    <!-- Search functionality -->
+                    <div class="search-container mb-4">
+                        <div class="search-input-container">
+                            <i class="fas fa-search search-icon"></i>
+                            <input type="text" id="report-search" class="search-input" placeholder="Search reports by name, date, or GC correction...">
+                            <button id="clear-search" class="btn-icon" type="button" title="Clear search">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table id="reports-table" class="reports-table">
+                            <thead>
+                                <tr>
+                                    <th>Report Name</th>
+                                    <th>Stages</th>
+                                    <th>Data Points</th>
+                                    <th>Date Range</th>
+                                    <th>GC Correction</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reports-table-body">
+                                <tr>
+                                    <td colspan="6" class="loading-text">Loading reports data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -53,12 +140,12 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Fetch reports and original files
+    // Fetch detailed reports data for the main table
     fetchDetailedReportsData();
-    fetchOriginalFiles();
+    
+    // Set up search functionality
+    setupSearchFunctionality();
 });
-
-
 
 function fetchDetailedReportsData() {
     fetch('/api/detailed-reports-list')
@@ -88,112 +175,40 @@ function fetchDetailedReportsData() {
                             <td>${report.stages || 'N/A'}</td>
                             <td>${report.data_points ? report.data_points.toLocaleString() : 'N/A'}</td>
                             <td>${dateRange}</td>
+                            <td>${report.gc_correction_factor || '0.86 (default)'}</td>
                             <td class="actions-cell">
                                 <a href="/visualize?report=${encodeURIComponent(report.name)}" class="btn-icon" title="View">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                <a href="/static/reports/${encodeURIComponent(report.name)}/overall_merged_data.csv" class="btn-icon" title="Download CSV" download>
-                                    <i class="fas fa-download"></i>
+                                <a href="/download_report_original_file/${encodeURIComponent(report.name)}/LV" class="btn-icon" title="Download Original LV File" download>
+                                    <i class="fas fa-file-alt"></i>
                                 </a>
-                                <a href="#" class="btn-icon report-details-btn" data-report="${encodeURIComponent(report.name)}" title="Details">
-                                    <i class="fas fa-info-circle"></i>
+                                <a href="/download_report_original_file/${encodeURIComponent(report.name)}/GC" class="btn-icon" title="Download Original GC File" download>
+                                    <i class="fas fa-vial"></i>
                                 </a>
-                                <button class="btn-icon add-to-db-btn" data-report="${encodeURIComponent(report.name)}" title="Add to Database">
-                                    <i class="fas fa-database"></i>
-                                </button>
+                                <a href="/upload?add_to_report=${encodeURIComponent(report.name)}" class="btn-icon" title="Add to Existing Report">
+                                    <i class="fas fa-plus-circle"></i>
+                                </a>
                             </td>
                         `;
                         
                         tableBody.appendChild(row);
                     });
                     
-                    // Add event listeners for detail buttons
-                    document.querySelectorAll('.report-details-btn').forEach(btn => {
-                        btn.addEventListener('click', function(e) {
-                            e.preventDefault();
-                            const reportName = this.getAttribute('data-report');
-                            showReportDetails(reportName);
-                        });
-                    });
-                    
-                    // Add event listeners for add to database buttons
-                    document.querySelectorAll('.add-to-db-btn').forEach(btn => {
-                        btn.addEventListener('click', function() {
-                            const reportName = this.getAttribute('data-report');
-                            addToDatabase(reportName, this);
-                        });
-                    });
+
                 } else {
-                    tableBody.innerHTML = '<tr><td colspan="5" class="empty-text">No reports found.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="6" class="empty-text">No reports found.</td></tr>';
                 }
             } else {
                 const tableBody = document.getElementById('reports-table-body');
-                tableBody.innerHTML = `<tr><td colspan="5" class="empty-text">Error loading reports: ${data.message || 'Unknown error'}</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="6" class="error-text">Error loading reports: ${data.message || 'Unknown error'}</td></tr>`;
                 console.error('Error from server:', data.message);
             }
         })
         .catch(error => {
             const tableBody = document.getElementById('reports-table-body');
-            tableBody.innerHTML = `<tr><td colspan="5" class="empty-text">Error: ${error.message}</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="6" class="error-text">Error: ${error.message}</td></tr>`;
             console.error('Error fetching reports data:', error);
-        });
-}
-
-function fetchOriginalFiles() {
-    fetch('/api/original-files')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Server responded with status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                const tableBody = document.getElementById('files-table-body');
-                tableBody.innerHTML = '';
-                
-                if (data.files && data.files.length > 0) {
-                    data.files.forEach(file => {
-                        const row = document.createElement('tr');
-                        
-                        // Determine file type
-                        let fileType = 'Unknown';
-                        let fileIcon = 'fa-file';
-                        
-                        if (file.name.toLowerCase().includes('lv') || file.name.toLowerCase().includes('labview')) {
-                            fileType = 'LabVIEW Data';
-                            fileIcon = 'fa-chart-line';
-                        } else if (file.name.toLowerCase().includes('gc') || file.name.toLowerCase().includes('chromatography')) {
-                            fileType = 'GC Data';
-                            fileIcon = 'fa-vial';
-                        }
-                        
-                        row.innerHTML = `
-                            <td><i class="fas ${fileIcon} file-icon"></i> ${file.name}</td>
-                            <td>${fileType}</td>
-                            <td>${file.size}</td>
-                            <td class="actions-cell">
-                                <a href="/download_original_file/${encodeURIComponent(file.name)}" class="btn-icon" title="Download" download>
-                                    <i class="fas fa-download"></i>
-                                </a>
-                            </td>
-                        `;
-                        
-                        tableBody.appendChild(row);
-                    });
-                } else {
-                    tableBody.innerHTML = '<tr><td colspan="4" class="empty-text">No original files found.</td></tr>';
-                }
-            } else {
-                const tableBody = document.getElementById('files-table-body');
-                tableBody.innerHTML = `<tr><td colspan="4" class="empty-text">Error loading files: ${data.message || 'Unknown error'}</td></tr>`;
-                console.error('Error from server:', data.message);
-            }
-        })
-        .catch(error => {
-            const tableBody = document.getElementById('files-table-body');
-            tableBody.innerHTML = `<tr><td colspan="4" class="empty-text">Error: ${error.message}</td></tr>`;
-            console.error('Error fetching original files:', error);
         });
 }
 
@@ -239,184 +254,7 @@ function showNotification(message, type = 'info') {
     }, 10);
 }
 
-function addToDatabase(reportName, buttonElement) {
-    // Show loading state
-    const originalHTML = buttonElement.innerHTML;
-    buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    buttonElement.disabled = true;
-    
-    fetch(`/api/database/add-to-database/${encodeURIComponent(reportName)}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        // Reset button
-        buttonElement.disabled = false;
-        
-        if (data.success) {
-            // Success
-            buttonElement.innerHTML = '<i class="fas fa-check"></i>';
-            buttonElement.classList.add('success');
-            showNotification(`Added ${reportName} to database successfully`, 'success');
-            
-            // Disable button after successful addition
-            setTimeout(() => {
-                buttonElement.disabled = true;
-                buttonElement.title = 'Already in database';
-            }, 1500);
-        } else {
-            // Error
-            buttonElement.innerHTML = originalHTML;
-            
-            // Check if it's already in the database (HTTP 409 Conflict)
-            if (data.message && data.message.includes('already exists')) {
-                showNotification(`${reportName} is already in the database`, 'warning');
-                buttonElement.disabled = true;
-                buttonElement.title = 'Already in database';
-            } else {
-                showNotification(`Error: ${data.message}`, 'error');
-            }
-        }
-    })
-    .catch(error => {
-        // Network or other error
-        buttonElement.innerHTML = originalHTML;
-        buttonElement.disabled = false;
-        showNotification(`Error: ${error.message}`, 'error');
-        console.error('Error adding to database:', error);
-    });
-}
 
-function showReportDetails(reportName) {
-    // Create a modal to display detailed information
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    
-    // Add loading content
-    modal.innerHTML = `
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h2>Report Details: ${reportName}</h2>
-            <div class="report-details">
-                <p class="loading-text">Loading report details...</p>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Show the modal
-    setTimeout(() => {
-        modal.classList.add('show');
-    }, 10);
-    
-    // Close modal functionality
-    const closeBtn = modal.querySelector('.close-modal');
-    closeBtn.addEventListener('click', () => {
-        modal.classList.remove('show');
-        setTimeout(() => {
-            document.body.removeChild(modal);
-        }, 300);
-    });
-    
-    // Close when clicking outside
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.classList.remove('show');
-            setTimeout(() => {
-                document.body.removeChild(modal);
-            }, 300);
-        }
-    });
-    
-    // Fetch report details
-    fetch(`/api/report-stats/${reportName}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Server responded with status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                let stagesHtml = '';
-                if (data.stages_data && data.stages_data.length > 0) {
-                    stagesHtml = `
-                        <h3>Stages Information</h3>
-                        <div class="stages-stats-table-container">
-                            <table class="stages-stats-table">
-                                <thead>
-                                    <tr>
-                                        <th>Stage</th>
-                                        <th>Data Points</th>
-                                        <th>Duration</th>
-                                        <th>Avg. T Heater 1 (°C)</th>
-                                        <th>Avg. Pressure (bar)</th>
-                                        <th>Avg. H₂ Flow (ml/min)</th>
-                                        <th>Avg. N₂ Flow (ml/min)</th>
-                                        <th>Avg. NH₃ (%)</th>
-                                        <th>Avg. Outlet Flow (g/h)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                    `;
-                    
-                    data.stages_data.forEach(stage => {
-                        stagesHtml += `
-                            <tr>
-                                <td>${stage.number}</td>
-                                <td>${stage.data_points || 'N/A'}</td>
-                                <td>${stage.duration || 'N/A'}</td>
-                                <td>${stage.avg_temp !== null ? stage.avg_temp.toFixed(1) : 'N/A'}</td>
-                                <td>${stage.avg_pressure !== null ? stage.avg_pressure.toFixed(2) : 'N/A'}</td>
-                                <td>${stage.avg_h2_flow !== null ? stage.avg_h2_flow.toFixed(2) : 'N/A'}</td>
-                                <td>${stage.avg_n2_flow !== null ? stage.avg_n2_flow.toFixed(2) : 'N/A'}</td>
-                                <td>${stage.avg_nh3 !== null ? stage.avg_nh3.toFixed(2) : 'N/A'}</td>
-                                <td>${stage.avg_outlet !== null ? stage.avg_outlet.toFixed(2) : 'N/A'}</td>
-                            </tr>
-                        `;
-                    });
-                    
-                    stagesHtml += `
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-                }
-                
-                const detailsHtml = `
-                    <div class="report-meta">
-                        <p><strong>Created:</strong> ${data.created_at || 'N/A'}</p>
-                        <p><strong>Total Data Points:</strong> ${data.data_points ? data.data_points.toLocaleString() : 'N/A'}</p>
-                        <p><strong>Total Stages:</strong> ${data.stages || 'N/A'}</p>
-                        <p><strong>Files Count:</strong> ${data.files_count || 'N/A'}</p>
-                        <p><strong>Total Size:</strong> ${formatSize(data.total_size) || 'N/A'}</p>
-                    </div>
-                    ${stagesHtml}
-                `;
-                
-                modal.querySelector('.report-details').innerHTML = detailsHtml;
-            } else {
-                modal.querySelector('.report-details').innerHTML = `
-                    <div class="error-message">
-                        <p>Error loading report details: ${data.message || 'Unknown error'}</p>
-                    </div>
-                `;
-                console.error('Error from server:', data.message);
-            }
-        })
-        .catch(error => {
-            modal.querySelector('.report-details').innerHTML = `
-                <div class="error-message">
-                    <p>Error: ${error.message}</p>
-                </div>
-            `;
-            console.error('Error fetching report details:', error);
-        });
-}
 
 function formatSize(bytes) {
     if (!bytes || bytes === 0) return '0 Bytes';
@@ -424,6 +262,76 @@ function formatSize(bytes) {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Add search functionality
+function setupSearchFunctionality() {
+    const searchInput = document.getElementById('report-search');
+    const clearSearchBtn = document.getElementById('clear-search');
+    const reportsTable = document.getElementById('reports-table');
+    let allReports = []; // Store all reports for filtering
+
+    // Initially hide the clear button
+    clearSearchBtn.style.display = 'none';
+
+    // Function to filter reports based on search query
+    function filterReports(query) {
+        query = query.toLowerCase().trim();
+        
+        // Show/hide clear button based on search content
+        clearSearchBtn.style.display = query ? 'block' : 'none';
+        
+        // If query is empty, show all reports
+        if (!query) {
+            renderReportsTable(allReports);
+            return;
+        }
+
+        // Filter reports that match the query
+        const filteredReports = allReports.filter(report => {
+            // Search in report name
+            if (report.name && report.name.toLowerCase().includes(query)) return true;
+            
+            // Search in date range
+            const dateRange = report.date_start && report.date_end ? 
+                `${report.date_start} - ${report.date_end}`.toLowerCase() : '';
+            if (dateRange.includes(query)) return true;
+            
+            // Search in GC correction factor
+            const gcCorrection = report.gc_correction_factor ? 
+                report.gc_correction_factor.toString().toLowerCase() : '';
+            if (gcCorrection.includes(query)) return true;
+            
+            return false;
+        });
+        
+        if (filteredReports.length === 0) {
+            const tableBody = document.getElementById('reports-table-body');
+            tableBody.innerHTML = `<tr><td colspan="6" class="empty-text">No reports found matching "${query}"</td></tr>`;
+        } else {
+            renderReportsTable(filteredReports);
+        }
+    }
+
+    // Event listener for search input
+    searchInput.addEventListener('input', function() {
+        filterReports(this.value);
+    });
+
+    // Event listener for clear search button
+    clearSearchBtn.addEventListener('click', function() {
+        searchInput.value = '';
+        filterReports('');
+        this.style.display = 'none';
+        searchInput.focus(); // Set focus back to search input
+    });
+
+    // Override the renderReportsTable function to store all reports
+    const originalRenderReportsTable = window.renderReportsTable;
+    window.renderReportsTable = function(reports) {
+        allReports = reports; // Store all reports
+        originalRenderReportsTable(reports);
+    };
 }
 </script>
 {% endblock %} 

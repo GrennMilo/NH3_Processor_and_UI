@@ -273,13 +273,20 @@ def process_lv_file(filename):
         traceback.print_exc()
         return pd.DataFrame()
 
-def process_gc_file(filename):
+def process_gc_file(filename, correction_factor=0.866):
     """
     Process GC file with improved format handling for the complex structure.
     The GC file has a complex multi-row header structure.
     Special focus on extracting N2, H2, and NH3 concentration data.
     
     This enhanced version integrates functionality from gc_integration.py
+    
+    Parameters:
+    -----------
+    filename : str
+        Path to the GC file
+    correction_factor : float, default=0.866
+        Correction factor to apply to the 11th column (index 10)
     """
     try:
         if not os.path.exists(filename) or os.path.getsize(filename) == 0:
@@ -291,8 +298,8 @@ def process_gc_file(filename):
             first_lines = [next(f) for _ in range(4) if f]
         
         # Use the enhanced GC file parser with column detection
-        print("Using enhanced GC file parser with column detection")
-        return parse_gc_file(filename)
+        print(f"Using enhanced GC file parser with column detection (correction factor: {correction_factor})")
+        return parse_gc_file(filename, correction_factor=correction_factor)
         
     except Exception as e:
         print(f"Error processing GC file '{filename}': {e}")
@@ -300,10 +307,17 @@ def process_gc_file(filename):
         traceback.print_exc()
         return pd.DataFrame()  # Return empty DataFrame instead of None
 
-def parse_gc_file(gc_file_path):
+def parse_gc_file(gc_file_path, correction_factor=0.866):
     """
     Parse GC file to extract headers and data values.
     Returns a dataframe with timestamps and GC values.
+    
+    Parameters:
+    -----------
+    gc_file_path : str
+        Path to the GC file
+    correction_factor : float, default=0.866
+        Correction factor to apply to the 11th column (index 10)
     """
     # Read GC file
     with open(gc_file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -340,6 +354,18 @@ def parse_gc_file(gc_file_path):
         if line.strip():
             # Split by tab and clean whitespace
             row = [cell.strip() for cell in line.strip().split('\t')]
+            
+            # Apply correction factor to 11th column (index 10) if it exists and is numeric
+            if len(row) > 10:
+                try:
+                    # Apply correction factor to the 11th column
+                    row_value = float(row[10])
+                    row[10] = str(row_value * correction_factor)
+                    print(f"Applied correction factor {correction_factor} to value: {row_value} -> {row_value * correction_factor}")
+                except (ValueError, IndexError) as e:
+                    # Skip if the value is not a number or index doesn't exist
+                    print(f"Could not apply correction factor to row value: {e}")
+            
             if len(row) == len(clean_headers):
                 data_rows.append(row)
     
@@ -1719,21 +1745,37 @@ def create_cross_comparison_plot(selected_comparison_json_file_paths, current_re
 
 def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_prefix_text=None, 
                     use_interpolation=False, interpolation_kind='cubic', use_uniform_grid=True, grid_freq='1min',
-                    existing_report_path=None):
+                    existing_report_path=None, gc_correction_factor=0.866):
     """
-    Enhanced reports generation with comprehensive error handling and improved processing.
-    Now integrates GC data processing from gc_integration.py.
+    Main function to process LV and GC files and generate reports.
     
     Parameters:
-    - lv_file_path: Path to the LabVIEW data file
-    - gc_file_path: Path to the GC data file
-    - base_output_folder: Base folder where reports will be saved
-    - report_prefix_text: Optional prefix text for the report folder name
-    - use_interpolation: Whether to use interpolation for merging data
-    - interpolation_kind: The kind of interpolation to use ('linear', 'cubic', etc.)
-    - use_uniform_grid: Whether to use a uniform time grid
-    - grid_freq: Frequency for the uniform time grid ('1min', '5min', etc.)
-    - existing_report_path: Path to an existing report to add data to (None for new reports)
+    -----------
+    lv_file_path : str
+        Path to the LabVIEW file
+    gc_file_path : str
+        Path to the Gas Chromatography file
+    base_output_folder : str
+        Base directory where report folders will be created
+    report_prefix_text : str, optional
+        Prefix text for the report folder name. If None, a timestamp will be used.
+    use_interpolation : bool, default=False
+        Whether to use interpolation for data fusion
+    interpolation_kind : str, default='cubic'
+        Type of interpolation to use if use_interpolation is True
+    use_uniform_grid : bool, default=True
+        Whether to use a uniform time grid for resampling
+    grid_freq : str, default='1min'
+        Frequency for the uniform time grid if use_uniform_grid is True
+    existing_report_path : str, optional
+        Path to an existing report folder to add data to
+    gc_correction_factor : float, default=0.866
+        Correction factor to apply to the 11th column of the GC file
+    
+    Returns:
+    --------
+    dict
+        Results dictionary with paths to generated files and status information
     """
     # Determine output folder based on whether we're adding to existing report or creating a new one
     if existing_report_path:
@@ -1792,7 +1834,7 @@ def generate_reports(lv_file_path, gc_file_path, base_output_folder, report_pref
         # Process GC file - now using the enhanced parser
         print(f"\n=== PROCESSING GC FILE ===")
         print(f"GC file path: {gc_file_path}")
-        df_gc_full = process_gc_file(gc_file_path)
+        df_gc_full = process_gc_file(gc_file_path, gc_correction_factor)
         
         if df_gc_full.empty:
             print("Warning: GC DataFrame is empty. Proceeding with LV data only.")

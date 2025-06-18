@@ -127,6 +127,18 @@
                                 </select>
                             </div>
                             
+                            <div class="form-group" id="particle_size_container" style="display: none;">
+                                <label for="particle_size">
+                                    <i class="fas fa-ruler"></i> Particle Size <span class="required">*</span>
+                                </label>
+                                <select id="particle_size" name="particle_size">
+                                    <option value="" disabled selected>Select particle size...</option>
+                                    <option value="0.5-1.0 mm">0.5-1.0 mm</option>
+                                    <option value="1.0-2.0 mm">1.0-2.0 mm</option>
+                                    <option value="1.5-3.0 mm">1.5-3.0 mm</option>
+                                </select>
+                            </div>
+                            
                             <div class="form-group">
                                 <label for="diluent_type">
                                     <i class="fas fa-mortar-pestle"></i> Diluent Type <span class="required">*</span>
@@ -236,6 +248,34 @@
                     </div>
                 </div>
                 <!-- End Interpolation Options -->
+                
+                <!-- GC Correction Factor Option -->
+                <div class="form-group">
+                    <label>
+                        <i class="fas fa-sliders-h"></i> GC Data Correction
+                    </label>
+                    
+                    <div class="option-container">
+                        <div class="form-group">
+                            <label for="gc_correction_factor">
+                                <i class="fas fa-calculator"></i> GC Correction Factor
+                            </label>
+                            <input type="number" id="gc_correction_factor" name="gc_correction_factor" value="0.86" step="0.01" title="Correction factor applied to 11th column of GC file">
+                        </div>
+                    </div>
+                    
+                    <div class="input-description">
+                        <p>This factor will be applied to the 11th column of the GC file before processing.</p>
+                        <details>
+                            <summary>Learn more about GC correction</summary>
+                            <div class="details-content">
+                                <p>The correction factor multiplies the values in the 11th column of the original GC file before any data processing takes place.</p>
+                                <p>Default value is 0.86. Adjust this value based on calibration requirements.</p>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+                <!-- End GC Correction Factor Option -->
                 
                 <div class="upload-actions">
                     <button type="submit" class="btn-primary" id="process-btn">
@@ -395,22 +435,54 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize mode
     updateProcessingMode();
     
+    // Check URL parameters for add_to_report
+    function checkUrlParameters() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const addToReport = urlParams.get('add_to_report');
+        
+        if (addToReport) {
+            // Switch to "Add to Existing Report" mode
+            modeAddToExisting.checked = true;
+            modeNewReport.checked = false;
+            updateProcessingMode();
+            
+            // Load reports and pre-select the one from URL
+            loadExistingReports(addToReport);
+        }
+    }
+    
+    // Call URL parameter check after DOM is loaded
+    checkUrlParameters();
+    
     // Function to load existing reports
-    function loadExistingReports() {
+    function loadExistingReports(preSelectReport = null) {
         existingReportSelect.innerHTML = '<option value="" disabled selected>Loading reports...</option>';
         
         fetch('/api/reports')
             .then(response => response.json())
             .then(data => {
                 if (data.success && data.reports && data.reports.length > 0) {
-                    existingReportSelect.innerHTML = '<option value="" disabled selected>Select a report...</option>';
+                    existingReportSelect.innerHTML = '<option value="" disabled>Select a report...</option>';
                     
+                    let reportFound = false;
                     data.reports.forEach(report => {
                         const option = document.createElement('option');
                         option.value = report.name;
                         option.textContent = report.name;
+                        
+                        // Pre-select if this matches the URL parameter
+                        if (preSelectReport && report.name === preSelectReport) {
+                            option.selected = true;
+                            reportFound = true;
+                        }
+                        
                         existingReportSelect.appendChild(option);
                     });
+                    
+                    // If preSelectReport was specified but not found, show a notification
+                    if (preSelectReport && !reportFound) {
+                        showNotification(`Report "${preSelectReport}" not found in available reports.`, 'warning');
+                    }
                 } else {
                     existingReportSelect.innerHTML = '<option value="" disabled selected>No reports available</option>';
                 }
@@ -483,7 +555,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Add all catalyst metadata fields
             const metadataFields = [
                 'experiment_number', 'catalyst_batch', 'reactor_number', 'catalyst_weight', 
-                'catalyst_volume', 'catalyst_state', 'diluent_type', 
+                'catalyst_volume', 'catalyst_state', 'particle_size', 'diluent_type', 
                 'catalyst_diluent_ratio', 'catalyst_bed_length', 
                 'tc_top', 'tc_bottom', 'catalyst_notes'
             ];
@@ -513,6 +585,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const gridFreq = document.getElementById('grid_freq').value;
             formData.append('grid_freq', gridFreq);
         }
+        
+        // Add GC correction factor
+        const gcCorrectionFactor = document.getElementById('gc_correction_factor').value;
+        formData.append('gc_correction_factor', gcCorrectionFactor);
         
         fetch('/process', {
             method: 'POST',
@@ -579,6 +655,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 ratioField.value = '';
             }
             ratioField.disabled = false;
+        }
+    });
+    
+    // Handle catalyst state change to show/hide particle size dropdown
+    document.getElementById('catalyst_state').addEventListener('change', function() {
+        const particleSizeContainer = document.getElementById('particle_size_container');
+        const particleSizeSelect = document.getElementById('particle_size');
+        
+        if (this.value === 'granules') {
+            particleSizeContainer.style.display = 'block';
+            particleSizeSelect.setAttribute('required', 'required');
+        } else {
+            particleSizeContainer.style.display = 'none';
+            particleSizeSelect.removeAttribute('required');
+            particleSizeSelect.value = ''; // Clear selection
         }
     });
     
@@ -666,6 +757,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     field.classList.add('error');
                 } else if (field) {
                     field.classList.remove('error');
+                }
+            }
+            
+            // Special validation for particle size when granules is selected
+            const catalystStateField = document.getElementById('catalyst_state');
+            const particleSizeField = document.getElementById('particle_size');
+            if (catalystStateField && catalystStateField.value === 'granules') {
+                if (!particleSizeField.value.trim()) {
+                    valid = false;
+                    errorMessage += 'Please select a particle size for granules.\n';
+                    particleSizeField.classList.add('error');
+                } else {
+                    particleSizeField.classList.remove('error');
                 }
             }
         }
